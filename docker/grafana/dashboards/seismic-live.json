@@ -1,0 +1,1030 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Pipeline Health",
+      "tooltip": "Services, throughput, lag and dead letters",
+      "type": "link",
+      "url": "/d/pipeline-health"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Events (data clock 24h)",
+      "description": "Earthquakes stored in the last 24 hours of the data clock, where the newest stored event counts as now.",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "SELECT count() AS \"Events\"\nFROM seismic.events_latest\nWHERE event_time >= (SELECT max(event_time) FROM seismic.events_latest)\n        - INTERVAL 24 HOUR\n  AND magnitude >= $min_mag",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No events stored yet",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "blue",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Max magnitude",
+      "description": "Largest magnitude stored in the last 24 hours of the data clock.",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "SELECT round(max(magnitude), 1) AS \"Max magnitude\"\nFROM seismic.events_latest\nWHERE event_time >= (SELECT max(event_time) FROM seismic.events_latest)\n        - INTERVAL 24 HOUR\n  AND magnitude >= $min_mag",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No events stored yet",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 6
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Alerts",
+      "description": "Alerts emitted for events in the last 24 hours of the data clock.",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "SELECT count() AS \"Alerts\"\nFROM seismic.alerts_latest\nWHERE event_time >= (SELECT max(event_time) FROM seismic.events_latest)\n        - INTERVAL 24 HOUR\n  AND magnitude >= $min_mag",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No alerts in this data window",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Data clock",
+      "description": "Real newest event time and the shift added at query time so the replay of a past week renders as if it were happening now (D16).",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "SELECT\n    toUnixTimestamp64Milli(max(event_time)) AS \"Newest event\",\n    dateDiff('second', max(event_time), now()) AS \"Shift (s)\"\nFROM seismic.events_latest",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "noValue": "No events stored yet",
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Shift (s)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Replay progress",
+      "description": "Fraction of the replay file already read by the one-shot ingest service; empty once the replay has finished and the container exits.",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(seismic_replay_progress_ratio) or vector(0)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "replay"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "No replay running",
+          "decimals": 1,
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Earthquake map",
+      "description": "Offline map: Grafana's bundled countries GeoJSON is the basemap, and markers are sized by magnitude and colored by depth.",
+      "type": "geomap",
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "SELECT latitude, longitude, magnitude, depth_km, place\nFROM seismic.events_latest\nWHERE magnitude >= $min_mag\nORDER BY event_time DESC\nLIMIT 500",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "No events in this data window",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "view": {
+          "id": "fit",
+          "allLayers": true,
+          "padding": 12,
+          "noRepeat": false
+        },
+        "basemap": {
+          "type": "geojson",
+          "name": "Countries (offline)",
+          "config": {
+            "src": "public/maps/countries.geojson",
+            "rules": [],
+            "style": {
+              "color": {
+                "fixed": "#4f6d8c"
+              },
+              "opacity": 0.35,
+              "lineWidth": 1
+            }
+          },
+          "opacity": 0.6
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Earthquakes",
+            "config": {
+              "showLegend": true,
+              "style": {
+                "size": {
+                  "field": "magnitude",
+                  "fixed": 5,
+                  "min": 2,
+                  "max": 20
+                },
+                "color": {
+                  "field": "depth_km",
+                  "fixed": "dark-red"
+                },
+                "opacity": 0.9,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                },
+                "textConfig": {
+                  "fontSize": 12,
+                  "textAlign": "center",
+                  "textBaseline": "middle",
+                  "offsetX": 0,
+                  "offsetY": 0
+                }
+              }
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "tooltip": true
+          }
+        ],
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": true,
+          "showAttribution": false,
+          "showScale": false,
+          "showDebug": false,
+          "showMeasure": false
+        },
+        "tooltip": {
+          "mode": "details"
+        }
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Events per hour (stream windows)",
+      "description": "Sum of the processor's 1-hour tumbling-window counts, shifted to the data clock so the replay history fills the last 24 hours.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "WITH (\n    SELECT max(event_time) FROM seismic.events_latest\n) AS data_now,\ndateDiff('second', data_now, now()) AS shift_seconds\nSELECT\n    window_start + toIntervalSecond(shift_seconds) AS \"time\",\n    sum(event_count) AS \"Events\"\nFROM seismic.window_stats_latest\nGROUP BY window_start\nORDER BY window_start",
+          "queryType": "timeseries",
+          "format": 0,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No stream windows in this data window",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Top regions",
+      "description": "Regions with the most stored events in the data window (top 10).",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "SELECT region AS \"Region\", count() AS \"Events\"\nFROM seismic.events_latest\nWHERE magnitude >= $min_mag\nGROUP BY region\nORDER BY count() DESC\nLIMIT 10",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No regions in this data window",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "sizing": "auto",
+        "minVizHeight": 16,
+        "maxVizHeight": 300,
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        }
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Magnitude histogram",
+      "description": "Stored events in 0.5-magnitude bins; useful to spot aftershock clusters.",
+      "type": "barchart",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "SELECT floor(magnitude * 2) / 2 AS \"Magnitude bin\", count() AS \"Events\"\nFROM seismic.events_latest\nWHERE magnitude >= $min_mag\nGROUP BY \"Magnitude bin\"\nORDER BY \"Magnitude bin\" ",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No events in this data window",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "Magnitude bin",
+        "orientation": "vertical",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "showValue": "auto",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Latest alerts",
+      "description": "Newest alerts with the USGS detail link behind the detail_url column; rows are limited to the selected minimum magnitude.",
+      "type": "table",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "WITH (\n    SELECT max(event_time) FROM seismic.events_latest\n) AS data_now,\ndateDiff('second', data_now, now()) AS shift_seconds\nSELECT\n    a.event_time + toIntervalSecond(shift_seconds) AS \"time\",\n    a.level AS \"Level\",\n    round(a.magnitude, 1) AS \"Magnitude\",\n    a.place AS \"Place\",\n    a.reason AS \"Reason\",\n    e.detail_url AS \"detail_url\"\nFROM seismic.alerts_latest AS a\nLEFT JOIN seismic.events_latest AS e ON a.event_id = e.event_id\nWHERE a.magnitude >= $min_mag\nORDER BY a.event_time DESC\nLIMIT 50",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No alerts in this data window",
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Level"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "WATCH": {
+                        "color": "orange",
+                        "index": 0
+                      },
+                      "WARNING": {
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail_url"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open USGS event",
+                    "url": "${__data.fields.detail_url}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "time"
+          }
+        ]
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Latest events",
+      "description": "Newest earthquake rows with magnitude, place, region and depth; the detail_url column links back to the USGS event page.",
+      "type": "table",
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "WITH (\n    SELECT max(event_time) FROM seismic.events_latest\n) AS data_now,\ndateDiff('second', data_now, now()) AS shift_seconds\nSELECT\n    event_time + toIntervalSecond(shift_seconds) AS \"time\",\n    round(magnitude, 1) AS \"Magnitude\",\n    place AS \"Place\",\n    region AS \"Region\",\n    round(depth_km, 1) AS \"Depth (km)\",\n    detail_url AS \"detail_url\"\nFROM seismic.events_latest\nWHERE magnitude >= $min_mag\nORDER BY event_time DESC\nLIMIT 100",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No events in this data window",
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail_url"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open USGS event",
+                    "url": "${__data.fields.detail_url}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "time"
+          }
+        ]
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Ecuador region watch",
+      "description": "Events inside the documented Ecuador bounding box (including Galapagos), with an explicit empty state for data windows without local activity.",
+      "type": "table",
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "rawSql": "WITH (\n    SELECT max(event_time) FROM seismic.events_latest\n) AS data_now,\ndateDiff('second', data_now, now()) AS shift_seconds\nSELECT\n    event_time + toIntervalSecond(shift_seconds) AS \"time\",\n    round(magnitude, 1) AS \"Magnitude\",\n    place AS \"Place\",\n    round(depth_km, 1) AS \"Depth (km)\",\n    detail_url AS \"detail_url\"\nFROM seismic.events_latest\nWHERE in_ecuador_region = 1\n  AND magnitude >= $min_mag\nORDER BY event_time DESC\nLIMIT 50",
+          "queryType": "table",
+          "format": 1,
+          "pluginVersion": "4.23.5"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No events in the Ecuador region in this data window",
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "detail_url"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open USGS event",
+                    "url": "${__data.fields.detail_url}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "time"
+          }
+        ]
+      },
+      "tags": [
+        "expect_data",
+        "seismic"
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 42,
+  "tags": [
+    "seismic",
+    "live",
+    "streaming"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "min_mag",
+        "label": "Minimum magnitude",
+        "description": "Applied as magnitude >= $min_mag in every seismic query.",
+        "type": "custom",
+        "query": "0,1,2,3,4,5",
+        "options": [
+          {
+            "selected": true,
+            "text": "0",
+            "value": "0"
+          },
+          {
+            "selected": false,
+            "text": "1",
+            "value": "1"
+          },
+          {
+            "selected": false,
+            "text": "2",
+            "value": "2"
+          },
+          {
+            "selected": false,
+            "text": "3",
+            "value": "3"
+          },
+          {
+            "selected": false,
+            "text": "4",
+            "value": "4"
+          },
+          {
+            "selected": false,
+            "text": "5",
+            "value": "5"
+          }
+        ],
+        "current": {
+          "selected": true,
+          "text": "0",
+          "value": "0"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "refresh": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "timezone": "utc",
+  "title": "Seismic Live",
+  "uid": "seismic-live",
+  "version": 1,
+  "weekStart": ""
+}
