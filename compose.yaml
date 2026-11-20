@@ -1,21 +1,25 @@
 name: realtime-seismic-stream
 
+# Shared environment for the application image (D19). Kept in its own anchor so
+# services such as `ingest` can extend it instead of replacing the whole map.
+x-app-env: &app-env
+  # Container-internal listeners; host clients use localhost:19092/13081.
+  # authlib (pulled in by confluent-kafka) warns about its httpx integration on
+  # import; silence that third-party deprecation so service logs stay JSON-only.
+  PYTHONWARNINGS: "ignore::DeprecationWarning"
+  SEISMIC_KAFKA_BOOTSTRAP: redpanda:9092
+  SEISMIC_SCHEMA_REGISTRY_URL: http://redpanda:8081
+  SEISMIC_CLICKHOUSE_HOST: clickhouse
+  SEISMIC_CLICKHOUSE_PORT: "8123"
+  SEISMIC_LOG_FORMAT: json
+
 # Shared application image for every one-shot and long-running service (D19).
 x-app: &app
   image: ${SEISMIC_IMAGE:-realtime-seismic-stream:local}
   build:
     context: .
     dockerfile: docker/app.Dockerfile
-  environment:
-    # Container-internal listeners; host clients use localhost:19092/13081.
-    # authlib (pulled in by confluent-kafka) warns about its httpx integration on
-    # import; silence that third-party deprecation so service logs stay JSON-only.
-    PYTHONWARNINGS: "ignore::DeprecationWarning"
-    SEISMIC_KAFKA_BOOTSTRAP: redpanda:9092
-    SEISMIC_SCHEMA_REGISTRY_URL: http://redpanda:8081
-    SEISMIC_CLICKHOUSE_HOST: clickhouse
-    SEISMIC_CLICKHOUSE_PORT: "8123"
-    SEISMIC_LOG_FORMAT: json
+  environment: *app-env
   networks:
     - backend
   restart: "no"
@@ -225,6 +229,14 @@ services:
     # appends options to `ingest` instead of replacing the whole command.
     entrypoint: ["seismic-stream", "ingest"]
     command: ["--source", "replay"]
+    environment:
+      <<: *app-env
+      # Interpolated from the shell or .env, so the installer flags and
+      # `SEISMIC_REPLAY_SPEED=max ./install.sh` reach the container.
+      SEISMIC_INGEST_SOURCE: ${SEISMIC_INGEST_SOURCE:-replay}
+      SEISMIC_REPLAY_SPEED: ${SEISMIC_REPLAY_SPEED:-1440}
+      SEISMIC_REPLAY_CHAOS: ${SEISMIC_REPLAY_CHAOS:-false}
+      SEISMIC_CHAOS_SEED: ${SEISMIC_CHAOS_SEED:-42}
     env_file:
       - path: .env
         required: false
