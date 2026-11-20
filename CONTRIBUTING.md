@@ -28,9 +28,16 @@ uv run seismic-stream --version
 | `make test` | Unit, property and architecture tests (no Docker) |
 | `make test-int` | Integration tests (Docker required) |
 | `make test-e2e` | End-to-end tests (full stack) |
-| `make cov` | Tests with coverage |
+| `make test-ui` | Playwright dashboard tests (full stack) |
+| `make cov` | Every test with the 85% coverage gate |
+| `make check` | Installer prerequisite checks (`./install.sh --check`) |
+| `make install` | Build the stack and start the replay |
+| `make down` | Stop the stack and keep its volumes |
+| `make shellcheck` | Lint `install.sh` |
+| `make compose-config` | Validate every Compose override combination |
+| `make actionlint` | Lint the GitHub Actions workflows |
 | `make audit` | `pip-audit` dependency audit |
-| `make ci` | Local equivalent of the CI lint and unit jobs |
+| `make ci` | Local equivalent of every CI job (Docker required) |
 
 Tests never reach the network: `pytest-socket` blocks every host except
 `127.0.0.1`/`::1`. Tests that need a service bind ephemeral ports (port `0`).
