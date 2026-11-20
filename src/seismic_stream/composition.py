@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
+import structlog
 from confluent_kafka import Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from prometheus_client import CollectorRegistry
@@ -20,6 +21,7 @@ from quixstreams import Application
 
 from seismic_stream import __version__
 from seismic_stream.adapters.clock import SystemClock
+from seismic_stream.adapters.kafka.admin import KafkaLagReader
 from seismic_stream.adapters.kafka.codecs import (
     AlertCodec,
     DeadLetterCodec,
@@ -50,6 +52,7 @@ from seismic_stream.application.ingest import (
     InMemoryDeadLetterPublisher,
     InMemoryEventPublisher,
 )
+from seismic_stream.application.monitoring import LagMonitor
 from seismic_stream.application.pacing import ReplayPacer
 from seismic_stream.application.ports import BatchConsumer, Clock, EventSource
 from seismic_stream.application.retry import RetryPolicy
@@ -264,3 +267,36 @@ def build_sink_session(
         consumer=kafka_consumer,
         _closer=producer.flush,
     )
+
+
+MONITOR_TOPICS = (EVENTS_TOPIC, AGGREGATES_TOPIC, ALERTS_TOPIC, DLQ_TOPIC)
+
+
+@dataclass(slots=True)
+class MonitorSession:
+    """Lag monitor plus the reader and metrics registry it owns."""
+
+    monitor: LagMonitor
+    metrics: PrometheusMetrics
+    reader: KafkaLagReader
+
+    def shutdown(self) -> None:
+        """Release the probe consumer."""
+        self.reader.close()
+
+
+def build_monitor_session(settings: Settings) -> MonitorSession:
+    """Wire the lag monitor with the Kafka offset reader (S14)."""
+    logger = structlog.get_logger("seismic.monitor")
+    metrics = build_metrics("monitor")
+    reader = KafkaLagReader(settings.kafka_bootstrap, MONITOR_TOPICS)
+    monitor = LagMonitor(
+        reader,
+        metrics,
+        groups=settings.monitor_groups,
+        topics=MONITOR_TOPICS,
+        interval_seconds=settings.monitor_interval_seconds,
+        clock=SystemClock(),
+        on_error=lambda error: logger.warning("lag_poll_failed", error=str(error)),
+    )
+    return MonitorSession(monitor=monitor, metrics=metrics, reader=reader)

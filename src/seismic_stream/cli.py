@@ -32,9 +32,11 @@ from seismic_stream.application.ports import SourceError
 from seismic_stream.application.retry import StoreError
 from seismic_stream.composition import (
     IngestSession,
+    MonitorSession,
     ProcessorSession,
     SinkSession,
     build_ingest_session,
+    build_monitor_session,
     build_processor_session,
     build_sink_session,
 )
@@ -291,6 +293,37 @@ def sink(
             session.shutdown()
 
     typer.echo(json.dumps(summary.as_dict(), sort_keys=True))
+
+
+@app.command()
+def monitor() -> None:
+    """Export consumer lag and topic end offsets for the configured groups."""
+    settings = _load_settings()
+    configure_logging("monitor", settings.log_level, settings.log_format)
+    shutdown = ShutdownSignal()
+    server: ObservabilityServer | None = None
+    session: MonitorSession | None = None
+    polls = 0
+    try:
+        with shutdown:
+            session = build_monitor_session(settings)
+            server = ObservabilityServer(
+                _service_metrics_port(settings, "monitor"),
+                session.metrics.registry,
+                lambda: Readiness(ready=True),
+            )
+            server.start()
+            polls = session.monitor.run(shutdown.stop_event)
+    except KafkaException as exc:
+        typer.echo(f"error: monitor failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    finally:
+        if server is not None:
+            server.stop()
+        if session is not None:
+            session.shutdown()
+
+    typer.echo(json.dumps({"polls": polls}, sort_keys=True))
 
 
 def _sink_readiness(session: SinkSession) -> Readiness:

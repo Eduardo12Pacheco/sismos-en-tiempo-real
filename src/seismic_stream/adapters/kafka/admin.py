@@ -10,7 +10,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from confluent_kafka import KafkaError, KafkaException
+from confluent_kafka import (
+    Consumer,
+    ConsumerGroupTopicPartitions,
+    KafkaError,
+    KafkaException,
+    TopicPartition,
+)
 from confluent_kafka.admin import AdminClient, NewTopic
 
 from seismic_stream.adapters.kafka.topics import TopicSpec
@@ -88,3 +94,85 @@ class TopicAdmin:
             created=tuple(sorted(created, key=order.__getitem__)),
             unchanged=tuple(sorted(unchanged, key=order.__getitem__)),
         )
+
+
+class KafkaLagReader:
+    """Read committed and end offsets through the Kafka admin and consumer APIs.
+
+    ``AdminClient.list_consumer_group_offsets`` reports the last committed offset
+    per partition (``-1001`` when a group never committed), while
+    ``Consumer.get_watermark_offsets`` reports the log end. The monitor combines
+    both; this adapter only exposes the raw offset maps.
+    """
+
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        topics: Iterable[str],
+        *,
+        admin: AdminClient | None = None,
+        consumer: Consumer | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
+        self._topics = tuple(topics)
+        self._timeout = timeout
+        self._admin = admin or AdminClient(
+            {"bootstrap.servers": bootstrap_servers, "client.id": "seismic-monitor"}
+        )
+        self._consumer = consumer or Consumer(
+            {
+                "bootstrap.servers": bootstrap_servers,
+                "group.id": "seismic-monitor-probe",
+                "client.id": "seismic-monitor",
+                "enable.auto.commit": False,
+                "auto.offset.reset": "earliest",
+            }
+        )
+        self._partitions: tuple[tuple[str, int], ...] | None = None
+
+    def _topic_partitions(self) -> tuple[tuple[str, int], ...]:
+        if self._partitions is None:
+            metadata = self._consumer.list_topics(timeout=self._timeout)
+            partitions: list[tuple[str, int]] = []
+            for topic in self._topics:
+                description = metadata.topics.get(topic)
+                if description is None or description.error is not None:
+                    continue
+                partitions.extend((topic, partition) for partition in sorted(description.partitions))
+            self._partitions = tuple(partitions)
+        return self._partitions
+
+    def end_offsets(self) -> dict[tuple[str, int], int]:
+        """Return the log end offset per partition of the configured topics."""
+        offsets: dict[tuple[str, int], int] = {}
+        for topic, partition in self._topic_partitions():
+            _low, high = self._consumer.get_watermark_offsets(
+                TopicPartition(topic, partition),
+                timeout=self._timeout,
+            )
+            offsets[(topic, partition)] = max(0, int(high))
+        return offsets
+
+    def consumer_offsets(self, group: str) -> dict[tuple[str, int], int]:
+        """Return the last committed offset per partition for ``group``."""
+        partitions = self._topic_partitions()
+        if not partitions:
+            return {}
+        request = ConsumerGroupTopicPartitions(
+            group,
+            [TopicPartition(topic, partition) for topic, partition in partitions],
+        )
+        futures = self._admin.list_consumer_group_offsets(
+            [request],
+            request_timeout=self._timeout,
+        )
+        result = futures[group].result(timeout=self._timeout)
+        return {
+            (partition.topic, partition.partition): int(partition.offset)
+            for partition in result.topic_partitions
+            if partition.error is None
+        }
+
+    def close(self) -> None:
+        """Release the probe consumer (the admin client has no close)."""
+        self._consumer.close()
