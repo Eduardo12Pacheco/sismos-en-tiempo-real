@@ -32,7 +32,7 @@ def test_defaults_match_the_documented_values() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.kafka_bootstrap == "localhost:19092"
-    assert settings.schema_registry_url == "http://localhost:18081"
+    assert settings.schema_registry_url == "http://localhost:13081"
     assert settings.clickhouse_host == "localhost"
     assert settings.clickhouse_port == 8123
     assert settings.clickhouse_user == "seismic"

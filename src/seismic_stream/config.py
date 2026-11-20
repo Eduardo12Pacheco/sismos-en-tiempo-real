@@ -84,7 +84,7 @@ class Settings(BaseSettings):
 
     # Broker and schema registry.
     kafka_bootstrap: str = "localhost:19092"
-    schema_registry_url: str = "http://localhost:18081"
+    schema_registry_url: str = "http://localhost:13081"
 
     # ClickHouse.
     clickhouse_host: str = "localhost"
