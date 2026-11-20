@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import seismic_stream  # noqa: F401  # isort: skip - must load warning filters first
 import hashlib
 import json
+import math
 from collections import Counter
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -16,10 +18,18 @@ from confluent_kafka.schema_registry import SchemaRegistryError
 
 from seismic_stream import __version__
 from seismic_stream.adapters.kafka.bootstrap import run as run_bootstrap
+from seismic_stream.adapters.kafka.producer import DeliveryError
 from seismic_stream.adapters.kafka.registry import SchemaConflictError
 from seismic_stream.adapters.observability.logging import configure_logging
+from seismic_stream.adapters.observability.server import (
+    ObservabilityServer,
+    Readiness,
+    ShutdownSignal,
+)
 from seismic_stream.adapters.sources.replay import ReplaySource
+from seismic_stream.application.ingest import IngestSummary
 from seismic_stream.application.ports import SourceError
+from seismic_stream.composition import IngestSession, build_ingest_session
 from seismic_stream.config import ConfigError, Settings, load_settings
 
 app = typer.Typer(
@@ -75,6 +85,126 @@ def bootstrap() -> None:
         typer.echo(f"error: bootstrap failed: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(json.dumps(result.as_dict(), sort_keys=True))
+
+
+@app.command()
+def ingest(  # noqa: PLR0917 - Typer exposes one parameter per CLI option
+    source: Annotated[
+        str | None,
+        typer.Option(
+            "--source",
+            help="Event source to ingest: replay (bundled sample) or usgs (live feed).",
+            metavar="[replay|usgs]",
+        ),
+    ] = None,
+    file: Annotated[
+        Path | None,
+        typer.Option(
+            "--file",
+            help="Recorded GeoJSON/NDJSON file for replay mode (overrides the setting).",
+            metavar="PATH",
+        ),
+    ] = None,
+    speed: Annotated[
+        str | None,
+        typer.Option(
+            "--speed",
+            help="Replay compression multiplier (> 0) or 'max' to disable pacing.",
+            metavar="N|max",
+        ),
+    ] = None,
+    chaos: Annotated[
+        bool | None,
+        typer.Option(
+            "--chaos/--no-chaos",
+            help="Inject malformed copies, duplicates and revisions deterministically.",
+        ),
+    ] = None,
+    seed: Annotated[
+        int | None,
+        typer.Option("--seed", help="Seed for the deterministic chaos policy."),
+    ] = None,
+    limit: Annotated[
+        int | None,
+        typer.Option("--limit", help="Stop after reading N source records.", metavar="N"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Validate and count records with in-memory publishers; no Kafka.",
+        ),
+    ] = False,
+) -> None:
+    """Stream recorded or live USGS events into Kafka, dead-lettering invalid ones."""
+    settings = _load_settings()
+    source_name = (source or settings.ingest_source).strip().lower()
+    if source_name not in ("replay", "usgs"):
+        raise typer.BadParameter("must be 'replay' or 'usgs'", param_hint="--source")
+    if limit is not None and limit <= 0:
+        raise typer.BadParameter("must be a positive integer", param_hint="--limit")
+    resolved_speed = settings.replay_speed if speed is None else _parse_speed(speed)
+    use_chaos = settings.replay_chaos if chaos is None else chaos
+    chaos_seed = settings.chaos_seed if seed is None else seed
+    replay_file = file if file is not None else settings.replay_file
+
+    configure_logging("ingest", settings.log_level, settings.log_format)
+    shutdown = ShutdownSignal()
+    server: ObservabilityServer | None = None
+    session: IngestSession | None = None
+    summary = IngestSummary(published=0, filtered=0, invalid=0, duration_seconds=0.0)
+    try:
+        with shutdown:
+            session = build_ingest_session(
+                settings,
+                source_name=source_name,
+                replay_file=replay_file,
+                speed=resolved_speed,
+                chaos=use_chaos,
+                seed=chaos_seed,
+                limit=limit,
+                dry_run=dry_run,
+                stop=shutdown.stop_event,
+            )
+            if not dry_run:
+                server = ObservabilityServer(
+                    settings.metrics_port,
+                    session.metrics.registry,
+                    lambda: Readiness(ready=True),
+                )
+                server.start()
+            summary = session.service.run(shutdown.stop_event)
+    except DeliveryError as exc:
+        typer.echo(f"error: ingest delivery failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    except (KafkaException, SchemaRegistryError, SourceError) as exc:
+        typer.echo(f"error: ingest failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    finally:
+        if server is not None:
+            server.stop()
+        if session is not None:
+            session.shutdown()
+
+    typer.echo(json.dumps(summary.as_dict(), sort_keys=True))
+
+
+def _parse_speed(raw: str) -> float | None:
+    """Parse ``--speed`` into a finite multiplier or ``None`` for ``max``."""
+    text = raw.strip()
+    if text.lower() == "max":
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        raise typer.BadParameter(
+            "must be a finite number greater than 0 or 'max'", param_hint="--speed"
+        ) from None
+    if not math.isfinite(value) or value <= 0:
+        raise typer.BadParameter(
+            "must be a finite number greater than 0 or 'max'", param_hint="--speed"
+        )
+    return value
 
 
 @app.command()

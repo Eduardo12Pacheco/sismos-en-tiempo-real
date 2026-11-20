@@ -22,6 +22,8 @@ RUN groupadd --system --gid 10001 seismic \
     && chown -R seismic:seismic /var/lib/seismic
 WORKDIR /app
 COPY --from=builder --chown=seismic:seismic /app/.venv /app/.venv
+# Bundled offline replay sample (S1) so `ingest` works without host mounts.
+COPY --chown=seismic:seismic data ./data
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
