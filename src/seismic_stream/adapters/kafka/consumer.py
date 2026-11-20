@@ -58,9 +58,7 @@ class KafkaBatchConsumer:
             remaining = max(0.0, deadline - time.monotonic())
             message = self._consumer.poll(remaining)
             if message is None:
-                if not records:
-                    break
-                continue
+                break
             error = message.error()
             if error is not None:
                 raise KafkaException(error)
