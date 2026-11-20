@@ -51,6 +51,8 @@ def _run_cli(*args: str, timeout: float = 180.0) -> subprocess.CompletedProcess[
         {
             "SEISMIC_KAFKA_BOOTSTRAP": KAFKA_BOOTSTRAP,
             "SEISMIC_SCHEMA_REGISTRY_URL": SCHEMA_REGISTRY_URL,
+            "SEISMIC_CLICKHOUSE_HOST": "127.0.0.1",
+            "SEISMIC_CLICKHOUSE_PORT": "13123",
             "SEISMIC_REPLAY_FILE": str(SAMPLE),
             "SEISMIC_METRICS_PORT": str(_free_port()),
             "SEISMIC_LOG_FORMAT": "json",

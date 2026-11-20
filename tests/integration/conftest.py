@@ -57,7 +57,7 @@ def compose(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 @pytest.fixture(scope="session")
 def stack() -> Iterator[None]:
-    """Start Redpanda with its test port overrides and tear it down afterwards."""
+    """Start Redpanda and ClickHouse and tear the subset down afterwards."""
     if not docker_available():
         message = "Docker with the Compose plugin is required for integration tests"
         if os.environ.get("SEISMIC_REQUIRE_DOCKER") == "1":
@@ -65,10 +65,10 @@ def stack() -> Iterator[None]:
         pytest.skip(message)
 
     compose("down", "-v", "--remove-orphans", check=False)
-    started = compose("up", "-d", "--wait", "redpanda", check=False)
+    started = compose("up", "-d", "--wait", "redpanda", "clickhouse", check=False)
     if started.returncode != 0:
         logs = compose("logs", "--no-color", "--tail=200", check=False)
-        pytest.fail(f"Redpanda failed to start:\n{started.stderr}\n{logs.stdout}\n{logs.stderr}")
+        pytest.fail(f"Test stack failed to start:\n{started.stderr}\n{logs.stdout}\n{logs.stderr}")
     try:
         yield
     finally:

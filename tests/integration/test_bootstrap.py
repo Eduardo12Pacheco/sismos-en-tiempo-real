@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,13 @@ def _registry() -> SchemaRegistryClient:
 
 
 def _run_bootstrap() -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "SEISMIC_CLICKHOUSE_HOST": "127.0.0.1",
+            "SEISMIC_CLICKHOUSE_PORT": "13123",
+        }
+    )
     return subprocess.run(
         [
             sys.executable,
@@ -41,6 +49,7 @@ def _run_bootstrap() -> subprocess.CompletedProcess[str]:
         text=True,
         timeout=120,
         check=False,
+        env=environment,
     )
 
 
@@ -59,7 +68,8 @@ def test_first_run_creates_four_topics_and_subjects(first_bootstrap: dict[str, A
     assert set(first_bootstrap["topics"]["created"]) == {spec.name for spec in TOPIC_SPECS}
     assert first_bootstrap["topics"]["unchanged"] == []
     assert set(first_bootstrap["subjects"]["created"]) == set(SUBJECTS)
-    assert first_bootstrap["clickhouse"] == "skipped"
+    clickhouse = first_bootstrap["clickhouse"]
+    assert len(clickhouse["applied"]) + len(clickhouse["skipped"]) == 6
 
     second = _run_bootstrap()
     assert second.returncode == 0, second.stderr
@@ -69,6 +79,7 @@ def test_first_run_creates_four_topics_and_subjects(first_bootstrap: dict[str, A
     assert summary["subjects"]["created"] == []
     assert set(summary["subjects"]["unchanged"]) == set(SUBJECTS)
     assert set(summary["compatibility"]["unchanged"]) == set(SUBJECTS)
+    assert summary["clickhouse"]["applied"] == []
 
 
 def test_registry_has_subjects_and_backward_compatibility(first_bootstrap: dict[str, Any]) -> None:
