@@ -1,0 +1,10 @@
+# Optional live mode (S17): the ingest service joins the edge network so it can
+# reach the USGS feed, and polls the real-time summary feed instead of replaying
+# the bundled sample. Every other service stays on the internal backend network.
+services:
+  ingest:
+    networks:
+      - backend
+      - edge
+    environment:
+      SEISMIC_INGEST_SOURCE: usgs
