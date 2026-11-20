@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: publish release
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked environment
+        run: uv sync --frozen
+      - name: Tag matches pyproject version
+        run: uv run python scripts/check_version_tag.py "$GITHUB_REF_NAME"
+      - name: Build wheel and sdist
+        run: uv build
+      - name: Build Compose bundle
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          version="${VERSION#v}"
+          git archive \
+            --format=zip \
+            --prefix="realtime-seismic-stream-${version}/" \
+            -o "dist/realtime-seismic-stream-${version}-compose-bundle.zip" \
+            HEAD
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum ./* > SHA256SUMS
+      - name: Generate changelog from Conventional Commits
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGELOG_RELEASE.md
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: CHANGELOG_RELEASE.md
+          files: dist/*
