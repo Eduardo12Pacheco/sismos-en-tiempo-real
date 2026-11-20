@@ -8,7 +8,7 @@ allowed to register contracts (D4).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from importlib.resources import files
 from typing import Any, Final, cast
 
@@ -30,6 +30,9 @@ WINDOW_STATS_SCHEMA_FILE: Final = "window_stats.v1.avsc"
 ALERT_SCHEMA_FILE: Final = "alert.v1.avsc"
 DEAD_LETTER_SCHEMA_FILE: Final = "dead_letter.v1.avsc"
 
+SOURCE_HEADER: Final = "source"
+INGESTED_AT_HEADER: Final = "ingested_at_ms"
+
 SERIALIZER_CONF: Final[dict[str, Any]] = {
     "auto.register.schemas": False,
     "use.latest.version": True,
@@ -41,6 +44,31 @@ type FromDict[T] = Callable[[Mapping[str, Any]], T]
 
 class CodecError(ValueError):
     """Raised when an Avro record cannot be mapped to a domain object."""
+
+
+def encode_headers(headers: Mapping[str, str]) -> list[tuple[str, bytes]]:
+    """Encode string headers for librdkafka, preserving insertion order."""
+    return [(name, value.encode("utf-8")) for name, value in headers.items()]
+
+
+def decode_headers(
+    headers: Iterable[tuple[str, bytes | str]] | None,
+) -> dict[str, str]:
+    """Decode a consumed Kafka message's headers into plain strings."""
+    if headers is None:
+        return {}
+    decoded: dict[str, str] = {}
+    for name, value in headers:
+        decoded[name] = value.decode("utf-8") if isinstance(value, bytes) else value
+    return decoded
+
+
+def event_headers(event: Event, ingested_at_ms: int) -> dict[str, str]:
+    """Build the headers attached to an ``earthquake_event`` message."""
+    return {
+        SOURCE_HEADER: event.source,
+        INGESTED_AT_HEADER: str(ingested_at_ms),
+    }
 
 
 def load_schema(filename: str) -> str:
