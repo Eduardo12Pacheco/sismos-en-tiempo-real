@@ -150,7 +150,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -Confirm:$false
           Import-Module PSScriptAnalyzer
           $findings = Invoke-ScriptAnalyzer -Path ./install.ps1 -Severity Error, Warning
           if ($findings) {
@@ -180,7 +181,6 @@ jobs:
     name: security
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: lint
     permissions:
       contents: read
     steps:
