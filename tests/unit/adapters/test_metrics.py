@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 from prometheus_client import CollectorRegistry, generate_latest
 
-from seismic_stream.adapters.observability.metrics import METRIC_CATALOG, PrometheusMetrics
+from seismic_stream.adapters.observability.metrics import (
+    METRIC_CATALOG,
+    SERVICE_METRICS,
+    PrometheusMetrics,
+)
 from seismic_stream.application.ports import Metrics
 
 
@@ -97,3 +101,16 @@ def test_sink_pause_gauge_can_be_cleared() -> None:
     metrics.set_sink_paused(False)
 
     assert "seismic_sink_paused 0.0" in _text(registry)
+
+
+@pytest.mark.parametrize("service", sorted(SERVICE_METRICS))
+def test_each_service_registers_exactly_its_catalog_subset(service: str) -> None:
+    metrics = PrometheusMetrics(CollectorRegistry(), service=service)
+
+    assert metrics.exported_names == SERVICE_METRICS[service]
+    assert metrics.exported_names <= {spec.name for spec in METRIC_CATALOG}
+
+
+def test_unknown_service_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown service"):
+        PrometheusMetrics(CollectorRegistry(), service="grafana")

@@ -80,7 +80,7 @@ class IngestSession:
 
 def build_metrics(service: str) -> PrometheusMetrics:
     """Create one per-process registry with the build-info gauge set."""
-    metrics = PrometheusMetrics(CollectorRegistry())
+    metrics = PrometheusMetrics(CollectorRegistry(), service)
     metrics.set_build_info(service, __version__)
     return metrics
 

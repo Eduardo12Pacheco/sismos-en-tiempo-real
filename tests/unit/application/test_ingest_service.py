@@ -36,6 +36,7 @@ class FakeMetrics:
         self.backpressure_waits = 0
         self.lags: list[float] = []
         self.progress: list[float] = []
+        self.dlq: list[tuple[str, str]] = []
 
     def record_ingest(self, source: str, outcome: str) -> None:
         self.ingest.append((source, outcome))
@@ -48,6 +49,9 @@ class FakeMetrics:
 
     def set_replay_progress(self, ratio: float) -> None:
         self.progress.append(ratio)
+
+    def record_dlq_message(self, stage: str, error_type: str) -> None:
+        self.dlq.append((stage, error_type))
 
 
 class RecordingEventPublisher:
@@ -176,6 +180,7 @@ def test_run_routes_invalid_features_to_the_dead_letter_channel() -> None:
     assert letter.attempts == 1
     assert letter.source_topic is None
     assert metrics.ingest == [("usgs", "invalid")]
+    assert metrics.dlq == [("ingest_validation", "missing")]
 
 
 def test_run_counts_every_outcome_in_one_pass() -> None:

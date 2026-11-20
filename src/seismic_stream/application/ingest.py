@@ -147,6 +147,7 @@ class IngestService:
                 except EventValidationError as error:
                     invalid += 1
                     self._metrics.record_ingest(self._source_name, "invalid")
+                    self._metrics.record_dlq_message(DlqStage.INGEST_VALIDATION.value, error.reason)
                     self._dead_letters.publish(self._dead_letter(record, error))
                     continue
 

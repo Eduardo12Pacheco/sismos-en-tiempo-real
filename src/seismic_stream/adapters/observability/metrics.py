@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Literal
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
@@ -139,13 +140,67 @@ METRIC_CATALOG: tuple[MetricSpec, ...] = (
 )
 
 
+#: Metrics owned by each long-running service. Registering only the owned subset
+#: keeps each ``/metrics`` endpoint truthful: a processor never exports sink
+#: gauges, and the drift test compares each service against exactly this subset.
+SERVICE_METRICS: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "ingest": frozenset(
+            {
+                "seismic_build_info",
+                "seismic_ingest_records_total",
+                "seismic_ingest_backpressure_waits_total",
+                "seismic_replay_schedule_lag_seconds",
+                "seismic_replay_progress_ratio",
+                "seismic_dlq_messages_total",
+            }
+        ),
+        "processor": frozenset(
+            {
+                "seismic_build_info",
+                "seismic_processor_events_total",
+                "seismic_processor_alerts_total",
+                "seismic_processor_window_updates_total",
+                "seismic_processor_skipped_total",
+            }
+        ),
+        "sink": frozenset(
+            {
+                "seismic_build_info",
+                "seismic_sink_rows_total",
+                "seismic_sink_batches_total",
+                "seismic_sink_insert_seconds",
+                "seismic_sink_retries_total",
+                "seismic_sink_paused",
+                "seismic_sink_end_to_end_seconds",
+                "seismic_dlq_messages_total",
+            }
+        ),
+        "monitor": frozenset(
+            {
+                "seismic_build_info",
+                "seismic_consumer_lag_messages",
+                "seismic_topic_end_offset",
+            }
+        ),
+    }
+)
+
+
 class PrometheusMetrics:
     """Export the catalog to one per-process :class:`CollectorRegistry`."""
 
-    def __init__(self, registry: CollectorRegistry) -> None:
+    def __init__(self, registry: CollectorRegistry, service: str | None = None) -> None:
+        if service is not None and service not in SERVICE_METRICS:
+            raise ValueError(f"unknown service {service!r}")
         self._registry = registry
         self._collectors: dict[str, Collector] = {}
-        for spec in METRIC_CATALOG:
+        selected = (
+            METRIC_CATALOG
+            if service is None
+            else tuple(spec for spec in METRIC_CATALOG if spec.name in SERVICE_METRICS[service])
+        )
+        for spec in selected:
             match spec.type:
                 case "counter":
                     collector: Collector = Counter(
@@ -156,6 +211,11 @@ class PrometheusMetrics:
                 case "histogram":
                     collector = Histogram(spec.name, spec.help_text, spec.labels, registry=registry)
             self._collectors[spec.name] = collector
+
+    @property
+    def exported_names(self) -> frozenset[str]:
+        """Metric families this instance registered (its service subset)."""
+        return frozenset(self._collectors)
 
     @property
     def registry(self) -> CollectorRegistry:
