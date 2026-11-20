@@ -1,0 +1,71 @@
+name: realtime-seismic-stream
+
+# Shared application image for every one-shot and long-running service (D19).
+x-app: &app
+  image: ${SEISMIC_IMAGE:-realtime-seismic-stream:local}
+  build:
+    context: .
+    dockerfile: docker/app.Dockerfile
+  environment:
+    # Container-internal listeners; host clients use localhost:19092/13081.
+    SEISMIC_KAFKA_BOOTSTRAP: redpanda:9092
+    SEISMIC_SCHEMA_REGISTRY_URL: http://redpanda:8081
+    SEISMIC_LOG_FORMAT: json
+  networks:
+    - backend
+  restart: "no"
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v26.2.7
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --overprovisioned
+      - --node-id
+      - "0"
+      - --check=false
+      - --default-log-level=info
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://127.0.0.1:19092
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr
+      - redpanda:33145
+      - --advertise-rpc-addr
+      - redpanda:33145
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 15s
+    networks:
+      - backend
+
+  bootstrap:
+    <<: *app
+    command: ["bootstrap"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+networks:
+  backend:
+    internal: true
+  edge: {}
+
+volumes:
+  redpanda-data:

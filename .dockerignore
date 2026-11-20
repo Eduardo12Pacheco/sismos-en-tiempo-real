@@ -17,8 +17,6 @@ build
 .env
 tests
 docs/assets
-README.md
-README.es.md
 CONTRIBUTING.md
 SECURITY.md
 CHANGELOG.md

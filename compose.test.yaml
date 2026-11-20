@@ -1,0 +1,13 @@
+# Test-only overrides: publish Redpanda's external listeners on loopback so
+# host-side pytest can reach the broker and the Schema Registry (L4 ports).
+services:
+  redpanda:
+    ports:
+      - "127.0.0.1:19092:19092"
+      - "127.0.0.1:13081:18081"
+    networks:
+      - backend
+      - edge
+
+networks:
+  edge: {}
