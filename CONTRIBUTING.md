@@ -58,6 +58,7 @@ must be listed here with the reason.
 | Module | Reason |
 |---|---|
 | `confluent_kafka` (and submodules) | Ships no PEP 561 marker or stubs; typed wrappers live in `adapters/kafka`. |
+| `authlib` (and submodules) | Transitive confluent-kafka extra with no stubs; only its warning class is imported to silence third-party noise. |
 
 ## Tests
 
