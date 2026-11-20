@@ -7,6 +7,9 @@
 *.yaml text eol=lf
 *.toml text eol=lf
 
+# Bundled samples must keep byte-identical checksums on every OS.
+*.geojson -text
+
 tests/ export-ignore
 .github/ export-ignore
 docs/assets/ export-ignore
