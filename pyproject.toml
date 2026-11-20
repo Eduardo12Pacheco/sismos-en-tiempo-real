@@ -20,6 +20,8 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "confluent-kafka[avro,schemaregistry]>=2.12,<2.13",
+  "fastavro>=1.13.1",
   "httpx>=0.28,<0.29",
   "prometheus-client>=0.26.0",
   "pydantic-settings",
@@ -87,6 +89,12 @@ warn_unreachable = true
 show_error_codes = true
 pretty = true
 files = ["src"]
+
+# confluent-kafka ships no PEP 561 marker or stubs; the Kafka adapters wrap its
+# untyped surface behind typed codecs, clients and dataclasses.
+[[tool.mypy.overrides]]
+module = ["confluent_kafka", "confluent_kafka.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"
