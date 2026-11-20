@@ -7,11 +7,11 @@ infrastructure libraries.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from seismic_stream.domain.models import DeadLetter, Event
+from seismic_stream.domain.models import Alert, DeadLetter, Event, WindowStats
 
 
 class SourceError(Exception):
@@ -153,4 +153,79 @@ class Metrics(Protocol):
 
     def set_topic_end_offset(self, topic: str, offset: int) -> None:
         """Set the end offset for ``topic``."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class StoredEvent:
+    """An event paired with the ingest timestamp used for latency metrics."""
+
+    event: Event
+    ingested_at_ms: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class ConsumedRecord:
+    """One raw Kafka message handed from the consumer adapter to the sink."""
+
+    topic: str
+    partition: int
+    offset: int
+    key: bytes | None
+    value: bytes
+    headers: Mapping[str, str]
+    timestamp_ms: int | None
+
+
+class BatchConsumer(Protocol):
+    """Batched consumer with explicit pause/resume and manual commits (D9)."""
+
+    def subscribe(self, topics: Sequence[str]) -> None:
+        """Subscribe to the configured topics."""
+        ...
+
+    def poll_batch(self, max_records: int, max_wait_seconds: float) -> list[ConsumedRecord]:
+        """Return up to ``max_records`` messages, waiting at most the given time."""
+        ...
+
+    def pause(self) -> None:
+        """Pause every currently assigned partition."""
+        ...
+
+    def resume(self) -> None:
+        """Resume every paused partition."""
+        ...
+
+    def commit(self, offsets: Mapping[tuple[str, int], int]) -> None:
+        """Commit next offsets keyed by ``(topic, partition)``."""
+        ...
+
+    def close(self) -> None:
+        """Release the consumer."""
+        ...
+
+
+class EventStore(Protocol):
+    """Idempotent columnar store for every table the sink writes."""
+
+    def insert_events(
+        self,
+        events: Sequence[Event],
+        *,
+        ingested_at_ms: Sequence[int | None],
+        token: str,
+    ) -> None:
+        """Insert events with their ingest timestamps and a deduplication token."""
+        ...
+
+    def insert_window_stats(self, rows: Sequence[WindowStats], *, token: str) -> None:
+        """Insert window aggregates with a deduplication token."""
+        ...
+
+    def insert_alerts(self, rows: Sequence[Alert], *, token: str) -> None:
+        """Insert alerts with a deduplication token."""
+        ...
+
+    def insert_dead_letters(self, rows: Sequence[DeadLetter], *, token: str) -> None:
+        """Insert dead letters with a deduplication token."""
         ...
