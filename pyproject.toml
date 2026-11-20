@@ -21,6 +21,7 @@ classifiers = [
 ]
 dependencies = [
   "httpx>=0.28,<0.29",
+  "prometheus-client>=0.26.0",
   "pydantic-settings",
   "structlog",
   "typer",

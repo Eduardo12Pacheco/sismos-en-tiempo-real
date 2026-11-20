@@ -15,6 +15,7 @@ import typer
 from seismic_stream import __version__
 from seismic_stream.adapters.sources.replay import ReplaySource
 from seismic_stream.application.ports import SourceError
+from seismic_stream.config import ConfigError, Settings, load_settings
 
 app = typer.Typer(
     name="seismic-stream",
@@ -28,6 +29,15 @@ def _version_callback(value: bool) -> None:
     if value:
         typer.echo(f"seismic-stream {__version__}")
         raise typer.Exit
+
+
+def _load_settings() -> Settings:
+    """Load settings or exit with the documented usage/config error code."""
+    try:
+        return load_settings()
+    except ConfigError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(2) from exc
 
 
 @app.callback()
@@ -52,19 +62,21 @@ def version() -> None:
 @app.command()
 def replay_info(
     file: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--file",
             help="Recorded GeoJSON FeatureCollection or NDJSON file to inspect.",
             metavar="PATH",
         ),
-    ],
+    ] = None,
     as_json: Annotated[
         bool,
         typer.Option("--json", help="Print the summary as a single JSON object."),
     ] = False,
 ) -> None:
     """Show the profile and checksum status of a recorded replay sample."""
+    if file is None:
+        file = _load_settings().replay_file
     try:
         source = ReplaySource(file)
     except SourceError as exc:
