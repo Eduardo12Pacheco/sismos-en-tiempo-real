@@ -205,6 +205,23 @@ class BatchConsumer(Protocol):
         ...
 
 
+@runtime_checkable
+class LagReader(Protocol):
+    """Read committed consumer offsets and topic end offsets for the monitor.
+
+    Offsets are keyed by ``(topic, partition)`` so a topic with more than one
+    partition is summed correctly if the stack is ever scaled out (ADR 0007).
+    """
+
+    def consumer_offsets(self, group: str) -> Mapping[tuple[str, int], int]:
+        """Return the last committed offset per topic partition for ``group``."""
+        ...
+
+    def end_offsets(self) -> Mapping[tuple[str, int], int]:
+        """Return the current end offset per topic partition for the probed topics."""
+        ...
+
+
 class EventStore(Protocol):
     """Idempotent columnar store for every table the sink writes."""
 
