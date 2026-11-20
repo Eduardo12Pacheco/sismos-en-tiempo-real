@@ -16,6 +16,7 @@ import httpx
 from confluent_kafka import Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from prometheus_client import CollectorRegistry
+from quixstreams import Application
 
 from seismic_stream import __version__
 from seismic_stream.adapters.clock import SystemClock
@@ -30,6 +31,7 @@ from seismic_stream.adapters.observability.metrics import PrometheusMetrics
 from seismic_stream.adapters.sources.chaos import ChaosPolicy, ChaoticSource
 from seismic_stream.adapters.sources.replay import ReplaySource
 from seismic_stream.adapters.sources.usgs_live import UsgsLiveSource, default_user_agent
+from seismic_stream.adapters.stream.topology import build_application, build_topology
 from seismic_stream.application.ingest import (
     IngestService,
     InMemoryDeadLetterPublisher,
@@ -167,3 +169,19 @@ def build_ingest_session(
         total_records=total_records,
     )
     return IngestSession(service=service, metrics=metrics, _closer=closer)
+
+
+@dataclass(slots=True)
+class ProcessorSession:
+    """Quix application plus the observability registry serving its metrics."""
+
+    application: Application
+    metrics: PrometheusMetrics
+
+
+def build_processor_session(settings: Settings) -> ProcessorSession:
+    """Wire the processor application and topology with the Kafka adapters."""
+    metrics = build_metrics("processor")
+    application = build_application(settings, metrics)
+    build_topology(application, settings, metrics)
+    return ProcessorSession(application=application, metrics=metrics)

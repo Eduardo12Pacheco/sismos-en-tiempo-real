@@ -29,8 +29,18 @@ from seismic_stream.adapters.observability.server import (
 from seismic_stream.adapters.sources.replay import ReplaySource
 from seismic_stream.application.ingest import IngestSummary
 from seismic_stream.application.ports import SourceError
-from seismic_stream.composition import IngestSession, build_ingest_session
-from seismic_stream.config import ConfigError, Settings, load_settings
+from seismic_stream.composition import (
+    IngestSession,
+    ProcessorSession,
+    build_ingest_session,
+    build_processor_session,
+)
+from seismic_stream.config import (
+    SERVICE_METRICS_PORTS,
+    ConfigError,
+    Settings,
+    load_settings,
+)
 
 app = typer.Typer(
     name="seismic-stream",
@@ -187,6 +197,59 @@ def ingest(  # noqa: PLR0917 - Typer exposes one parameter per CLI option
             session.shutdown()
 
     typer.echo(json.dumps(summary.as_dict(), sort_keys=True))
+
+
+@app.command()
+def process(
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            help="Stop after N idle seconds (0 runs until SIGTERM/SIGINT).",
+            metavar="SECONDS",
+        ),
+    ] = 0.0,
+    count: Annotated[
+        int,
+        typer.Option(
+            "--count",
+            help="Stop after producing N outputs (0 disables the limit).",
+            metavar="N",
+        ),
+    ] = 0,
+) -> None:
+    """Process events with dedup, event-time windows and the alert policy."""
+    settings = _load_settings()
+    if timeout < 0:
+        raise typer.BadParameter("must be zero or positive", param_hint="--timeout")
+    if count < 0:
+        raise typer.BadParameter("must be zero or positive", param_hint="--count")
+
+    configure_logging("processor", settings.log_level, settings.log_format)
+    server: ObservabilityServer | None = None
+    session: ProcessorSession | None = None
+    try:
+        session = build_processor_session(settings)
+        server = ObservabilityServer(
+            _service_metrics_port(settings, "processor"),
+            session.metrics.registry,
+            lambda: Readiness(ready=True),
+        )
+        server.start()
+        session.application.run(timeout=timeout, count=count, collect=False)
+    except (KafkaException, SchemaRegistryError) as exc:
+        typer.echo(f"error: processor failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    finally:
+        if server is not None:
+            server.stop()
+
+
+def _service_metrics_port(settings: Settings, service: str) -> int:
+    """Inject the per-service metrics port unless the environment overrides it."""
+    if "metrics_port" in settings.model_fields_set:
+        return settings.metrics_port
+    return SERVICE_METRICS_PORTS[service]
 
 
 def _parse_speed(raw: str) -> float | None:

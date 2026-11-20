@@ -65,6 +65,31 @@ services:
       redpanda:
         condition: service_healthy
 
+  processor:
+    <<: *app
+    command: ["process"]
+    restart: unless-stopped
+    environment:
+      SEISMIC_KAFKA_BOOTSTRAP: redpanda:9092
+      SEISMIC_SCHEMA_REGISTRY_URL: http://redpanda:8081
+      SEISMIC_LOG_FORMAT: json
+      SEISMIC_STATE_DIR: /var/lib/seismic/state
+    volumes:
+      - processor-state:/var/lib/seismic/state
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:9102/readyz', timeout=3)
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
   ingest:
     <<: *app
     # Keep the subcommand in the entrypoint so `docker compose run ingest --speed max`
@@ -85,3 +110,4 @@ networks:
 
 volumes:
   redpanda-data:
+  processor-state:
