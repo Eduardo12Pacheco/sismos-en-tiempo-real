@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import time
 import urllib.parse
+import urllib.request
 from collections.abc import Callable, Iterable
 from datetime import UTC
 from pathlib import Path
@@ -263,3 +264,24 @@ def to_milliseconds(value: Any) -> int:
     if getattr(value, "tzinfo", None) is None:
         value = value.replace(tzinfo=UTC)
     return round(value.timestamp() * 1000)
+
+
+GRAFANA_URL: Final = "http://127.0.0.1:13000"
+
+
+def grafana_json(
+    path: str,
+    payload: dict[str, Any] | None = None,
+    *,
+    timeout: int = 60,
+) -> Any:
+    """Call Grafana's HTTP API and decode the JSON response."""
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        f"{GRAFANA_URL}{path}",
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="GET" if payload is None else "POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
