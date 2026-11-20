@@ -30,7 +30,11 @@ class FakeAdmin:
 
 
 class FakeConsumer:
-    def __init__(self, partitions: dict[str, list[int]], watermarks: dict[tuple[str, int], tuple[int, int]]):
+    def __init__(
+        self,
+        partitions: dict[str, list[int]],
+        watermarks: dict[tuple[str, int], tuple[int, int]],
+    ) -> None:
         self.partitions = partitions
         self.watermarks = watermarks
         self.closed = False

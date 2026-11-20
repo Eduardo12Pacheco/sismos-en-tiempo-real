@@ -6,6 +6,7 @@ import seismic_stream  # noqa: F401  # isort: skip - must load warning filters f
 import hashlib
 import json
 import math
+import time
 from collections import Counter
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -17,9 +18,18 @@ from confluent_kafka import KafkaException
 from confluent_kafka.schema_registry import SchemaRegistryError
 
 from seismic_stream import __version__
+from seismic_stream.adapters.diagnostics import missing_ids, run_doctor, stored_event_ids
+from seismic_stream.adapters.kafka.admin import KafkaLagReader
 from seismic_stream.adapters.kafka.bootstrap import run as run_bootstrap
 from seismic_stream.adapters.kafka.producer import DeliveryError
 from seismic_stream.adapters.kafka.registry import SchemaConflictError
+from seismic_stream.adapters.kafka.topics import (
+    AGGREGATES_TOPIC,
+    ALERTS_TOPIC,
+    DLQ_TOPIC,
+    EVENTS_TOPIC,
+    SINK_CONSUMER_GROUP,
+)
 from seismic_stream.adapters.observability.logging import configure_logging
 from seismic_stream.adapters.observability.server import (
     ObservabilityServer,
@@ -28,6 +38,7 @@ from seismic_stream.adapters.observability.server import (
 )
 from seismic_stream.adapters.sources.replay import ReplaySource
 from seismic_stream.application.ingest import IngestSummary
+from seismic_stream.application.monitoring import compute_lags, topic_end_offsets
 from seismic_stream.application.ports import SourceError
 from seismic_stream.application.retry import StoreError
 from seismic_stream.composition import (
@@ -46,6 +57,8 @@ from seismic_stream.config import (
     Settings,
     load_settings,
 )
+from seismic_stream.domain.errors import EventValidationError
+from seismic_stream.domain.normalize import feature_to_event
 
 app = typer.Typer(
     name="seismic-stream",
@@ -324,6 +337,135 @@ def monitor() -> None:
             session.shutdown()
 
     typer.echo(json.dumps({"polls": polls}, sort_keys=True))
+
+
+@app.command()
+def doctor() -> None:
+    """Check Kafka, the Schema Registry and ClickHouse, printing PASS/FAIL rows."""
+    settings = _load_settings()
+    configure_logging("doctor", settings.log_level, settings.log_format)
+    checks = run_doctor(settings)
+    width = max(len(check.check) for check in checks)
+    typer.echo(f"{'CHECK':<{width}}  STATUS  DETAIL")
+    for check in checks:
+        typer.echo(f"{check.check:<{width}}  {check.status:<6}  {check.detail}")
+    if not all(check.ok for check in checks):
+        raise typer.Exit(1)
+
+
+@app.command()
+def verify(
+    file: Annotated[
+        Path | None,
+        typer.Option(
+            "--file",
+            help="Recorded GeoJSON/NDJSON file whose earthquake ids must be stored.",
+            metavar="PATH",
+        ),
+    ] = None,
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            help="Maximum seconds to wait for delivery and zero sink lag.",
+            metavar="SECONDS",
+        ),
+    ] = 120.0,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Print the result as a single JSON object."),
+    ] = False,
+) -> None:
+    """Wait until every replay earthquake is stored and the sink lag is zero."""
+    settings = _load_settings()
+    if timeout < 0:
+        raise typer.BadParameter("must be zero or positive", param_hint="--timeout")
+    replay_file = file if file is not None else settings.replay_file
+    try:
+        expected = _earthquake_ids(replay_file)
+    except SourceError as exc:
+        typer.echo(f"error: verify failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    configure_logging("verify", settings.log_level, settings.log_format)
+    topics = (EVENTS_TOPIC, AGGREGATES_TOPIC, ALERTS_TOPIC, DLQ_TOPIC)
+    reader = KafkaLagReader(settings.kafka_bootstrap, topics)
+    stored: set[str] = set()
+    lags: dict[tuple[str, str], int] = {}
+    last_error: Exception | None = None
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                stored = stored_event_ids(settings)
+                ends = topic_end_offsets(reader.end_offsets(), topics)
+                lags = compute_lags(
+                    ends,
+                    reader.consumer_offsets(SINK_CONSUMER_GROUP),
+                    group=SINK_CONSUMER_GROUP,
+                    topics=topics,
+                )
+                last_error = None
+            except Exception as error:  # keep waiting while the stack warms up
+                last_error = error
+            missing = missing_ids(expected, stored)
+            if not missing and all(lag == 0 for lag in lags.values()) and lags:
+                break
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(1.0)
+    finally:
+        reader.close()
+
+    missing = missing_ids(expected, stored)
+    ok = not missing and bool(lags) and all(lag == 0 for lag in lags.values())
+    result: dict[str, Any] = {
+        "ok": ok,
+        "expected": len(expected),
+        "stored": len(expected) - len(missing),
+        "missing": len(missing),
+        "missing_ids": missing[:20],
+        "lag": {topic: lag for (_group, topic), lag in sorted(lags.items())},
+    }
+    if last_error is not None:
+        result["error"] = f"{type(last_error).__name__}: {last_error}"
+
+    if as_json:
+        typer.echo(json.dumps(result, sort_keys=True))
+    else:
+        typer.echo(_render_verify(result))
+    if not ok:
+        raise typer.Exit(1)
+
+
+def _render_verify(result: Mapping[str, Any]) -> str:
+    lines = [
+        f"verify: {result['stored']}/{result['expected']} events stored, "
+        f"{result['missing']} missing",
+    ]
+    missing = result["missing_ids"]
+    if isinstance(missing, list) and missing:
+        lines.append("missing ids:")
+        lines.extend(f"  - {event_id}" for event_id in missing)
+    lag = result["lag"]
+    if isinstance(lag, Mapping) and lag:
+        lines.append("sink lag: " + ", ".join(f"{topic}={count}" for topic, count in lag.items()))
+    if "error" in result:
+        lines.append(f"last error: {result['error']}")
+    return "\n".join(lines)
+
+
+def _earthquake_ids(file: Path) -> set[str]:
+    """Collect the ids of the valid earthquake features in a replay file."""
+    ids: set[str] = set()
+    for record in ReplaySource(file).records():
+        try:
+            event = feature_to_event(record.feature)
+        except EventValidationError:
+            continue
+        if event.event_type == "earthquake":
+            ids.add(event.event_id)
+    return ids
 
 
 def _sink_readiness(session: SinkSession) -> Readiness:

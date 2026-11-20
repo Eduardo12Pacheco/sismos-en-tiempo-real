@@ -24,6 +24,43 @@ class LagSnapshot:
     end_offsets: Mapping[str, int]
 
 
+def topic_end_offsets(
+    ends: Mapping[tuple[str, int], int],
+    topics: Sequence[str],
+) -> dict[str, int]:
+    """Sum every partition's end offset per topic, defaulting absent topics to 0."""
+    totals = dict.fromkeys(topics, 0)
+    for (topic, _partition), offset in ends.items():
+        if topic in totals:
+            totals[topic] += max(0, offset)
+    return totals
+
+
+def compute_lags(
+    end_offsets: Mapping[str, int],
+    committed: Mapping[tuple[str, int], int],
+    *,
+    group: str,
+    topics: Sequence[str],
+) -> dict[tuple[str, str], int]:
+    """Return non-negative lag per group/topic from summed end and committed offsets.
+
+    Kafka reports ``-1001`` for a partition with no committed offset; treating it
+    as zero makes the lag equal to the full backlog, which is what an operator
+    expects for a group that has never consumed a topic.
+    """
+    lags: dict[tuple[str, str], int] = {}
+    for topic in topics:
+        end = end_offsets.get(topic, 0)
+        consumed = sum(
+            max(0, offset)
+            for (committed_topic, _partition), offset in committed.items()
+            if committed_topic == topic
+        )
+        lags[(group, topic)] = max(0, end - consumed)
+    return lags
+
+
 class LagMonitor:
     """Poll broker offsets on an interval and publish the lag gauge catalog."""
 
@@ -50,24 +87,19 @@ class LagMonitor:
 
     def poll_once(self) -> LagSnapshot:
         """Read every configured group and publish lag plus topic end offsets."""
-        ends = self._reader.end_offsets()
-        end_by_topic = dict.fromkeys(self._topics, 0)
-        for (topic, _partition), offset in ends.items():
-            if topic in end_by_topic:
-                end_by_topic[topic] += max(0, offset)
+        end_by_topic = topic_end_offsets(self._reader.end_offsets(), self._topics)
 
         lags: dict[tuple[str, str], int] = {}
         for group in self._groups:
             committed = self._reader.consumer_offsets(group)
-            for topic in self._topics:
-                end = end_by_topic[topic]
-                consumed = sum(
-                    max(0, offset)
-                    for (committed_topic, _partition), offset in committed.items()
-                    if committed_topic == topic
-                )
-                lag = max(0, end - consumed)
-                lags[(group, topic)] = lag
+            group_lags = compute_lags(
+                end_by_topic,
+                committed,
+                group=group,
+                topics=self._topics,
+            )
+            lags.update(group_lags)
+            for (_group, topic), lag in group_lags.items():
                 self._metrics.set_consumer_lag(group, topic, lag)
 
         for topic, offset in end_by_topic.items():

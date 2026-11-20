@@ -138,7 +138,9 @@ class KafkaLagReader:
                 description = metadata.topics.get(topic)
                 if description is None or description.error is not None:
                     continue
-                partitions.extend((topic, partition) for partition in sorted(description.partitions))
+                partitions.extend(
+                    (topic, partition) for partition in sorted(description.partitions)
+                )
             self._partitions = tuple(partitions)
         return self._partitions
 

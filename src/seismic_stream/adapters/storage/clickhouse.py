@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Final
+from typing import Any, Final
 
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
@@ -215,6 +215,38 @@ class ClickHouseStore:
             for row in rows
         ]
         self._insert("dead_letters", data, DEAD_LETTER_COLUMNS, token)
+
+    def close(self) -> None:
+        """Close the underlying HTTP client."""
+        self._client.close()
+
+    def ping(self) -> None:
+        """Round-trip one trivial query to prove the server is reachable."""
+        self._run_query("SELECT 1")
+
+    def table_names(self) -> set[str]:
+        """Return the tables currently present in the configured database."""
+        _rows = self._run_query(
+            "SELECT name FROM system.tables WHERE database = %(database)s",
+            parameters={"database": self._database},
+        )
+        return {str(row[0]) for row in _rows}
+
+    def event_ids(self) -> set[str]:
+        """Return the deduplicated event ids currently stored in ``events_latest``."""
+        _rows = self._run_query(f"SELECT event_id FROM {self._database}.events_latest")
+        return {str(row[0]) for row in _rows}
+
+    def _run_query(
+        self,
+        sql: str,
+        parameters: dict[str, Any] | None = None,
+    ) -> list[tuple[object, ...]]:
+        try:
+            result = self._client.query(sql, parameters=parameters)
+        except Exception as error:
+            raise classify_clickhouse_error(error) from error
+        return [tuple(row) for row in result.result_rows]
 
     def _insert(
         self,

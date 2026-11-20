@@ -40,6 +40,7 @@ from seismic_stream.adapters.kafka.topics import (
     ALERTS_TOPIC,
     DLQ_TOPIC,
     EVENTS_TOPIC,
+    SINK_CONSUMER_GROUP,
 )
 from seismic_stream.adapters.observability.metrics import PrometheusMetrics
 from seismic_stream.adapters.sources.chaos import ChaosPolicy, ChaoticSource
@@ -231,7 +232,7 @@ def build_sink_session(
     """Wire the sink use case, the Kafka consumer and the ClickHouse repository."""
     metrics = build_metrics("sink")
     kafka_consumer = consumer or KafkaBatchConsumer.from_config(
-        settings.kafka_bootstrap, "seismic-sink"
+        settings.kafka_bootstrap, SINK_CONSUMER_GROUP
     )
     kafka_consumer.subscribe((EVENTS_TOPIC, AGGREGATES_TOPIC, ALERTS_TOPIC, DLQ_TOPIC))
     clickhouse = store or ClickHouseStore.from_settings(settings)

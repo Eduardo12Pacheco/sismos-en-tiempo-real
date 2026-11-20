@@ -10,6 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
+SINK_CONSUMER_GROUP: Final = "seismic-sink"
+PROCESSOR_CONSUMER_GROUP: Final = "seismic-processor"
+
 EVENTS_TOPIC: Final = "seismic.events.v1"
 AGGREGATES_TOPIC: Final = "seismic.aggregates.v1"
 ALERTS_TOPIC: Final = "seismic.alerts.v1"
