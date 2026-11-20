@@ -95,3 +95,7 @@ def configure_logging(service: str, level: str = "INFO", fmt: str = "json") -> N
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(numeric_level)
+
+    # HTTP client request lines are debug detail; keep bootstrap output readable.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(max(numeric_level, logging.WARNING))
