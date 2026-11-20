@@ -1,0 +1,25 @@
+{
+  "type": "record",
+  "name": "DeadLetter",
+  "namespace": "seismic.dlq.v1",
+  "doc": "Dead-letter envelope published to seismic.dlq.v1.",
+  "fields": [
+    {"name": "dlq_id", "type": "string"},
+    {
+      "name": "stage",
+      "type": {
+        "type": "enum",
+        "name": "DeadLetterStage",
+        "symbols": ["ingest_validation", "sink_decode", "sink_persist"]
+      }
+    },
+    {"name": "error_type", "type": "string"},
+    {"name": "error_message", "type": "string"},
+    {"name": "source_topic", "type": ["null", "string"], "default": null},
+    {"name": "source_partition", "type": ["null", "int"], "default": null},
+    {"name": "source_offset", "type": ["null", "long"], "default": null},
+    {"name": "payload", "type": "bytes"},
+    {"name": "failed_at_ms", "type": "long"},
+    {"name": "attempts", "type": "int"}
+  ]
+}

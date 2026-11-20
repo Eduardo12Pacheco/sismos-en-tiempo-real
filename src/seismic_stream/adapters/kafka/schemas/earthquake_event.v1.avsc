@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "EarthquakeEvent",
+  "namespace": "seismic.events.v1",
+  "doc": "Canonical earthquake event published to seismic.events.v1.",
+  "fields": [
+    {"name": "event_id", "type": "string"},
+    {"name": "source", "type": "string"},
+    {"name": "event_type", "type": "string"},
+    {"name": "event_time_ms", "type": "long"},
+    {"name": "updated_at_ms", "type": "long"},
+    {"name": "magnitude", "type": "double"},
+    {"name": "magnitude_type", "type": ["null", "string"], "default": null},
+    {"name": "place", "type": "string"},
+    {"name": "region", "type": "string"},
+    {"name": "latitude", "type": "double"},
+    {"name": "longitude", "type": "double"},
+    {"name": "depth_km", "type": "double"},
+    {"name": "status", "type": "string"},
+    {"name": "tsunami", "type": "boolean"},
+    {"name": "significance", "type": "int"},
+    {"name": "network", "type": ["null", "string"], "default": null},
+    {"name": "detail_url", "type": ["null", "string"], "default": null},
+    {"name": "in_ecuador_region", "type": "boolean"}
+  ]
+}

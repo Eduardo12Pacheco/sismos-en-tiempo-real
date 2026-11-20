@@ -1,0 +1,24 @@
+{
+  "type": "record",
+  "name": "Alert",
+  "namespace": "seismic.alerts.v1",
+  "doc": "Alert emitted by the domain policy, published to seismic.alerts.v1.",
+  "fields": [
+    {"name": "event_id", "type": "string"},
+    {
+      "name": "level",
+      "type": {
+        "type": "enum",
+        "name": "AlertLevel",
+        "symbols": ["WATCH", "WARNING"]
+      }
+    },
+    {"name": "reason", "type": "string"},
+    {"name": "magnitude", "type": "double"},
+    {"name": "place", "type": "string"},
+    {"name": "event_time_ms", "type": "long"},
+    {"name": "updated_at_ms", "type": "long"},
+    {"name": "tsunami", "type": "boolean"},
+    {"name": "in_ecuador_region", "type": "boolean"}
+  ]
+}

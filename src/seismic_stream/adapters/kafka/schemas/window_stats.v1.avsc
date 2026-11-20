@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "WindowStats",
+  "namespace": "seismic.aggregates.v1",
+  "doc": "Statistics for one event-time tumbling window, published to seismic.aggregates.v1.",
+  "fields": [
+    {"name": "region", "type": "string"},
+    {"name": "window_start_ms", "type": "long"},
+    {"name": "window_end_ms", "type": "long"},
+    {"name": "event_count", "type": "long"},
+    {"name": "max_magnitude", "type": "double"},
+    {"name": "mean_magnitude", "type": "double"},
+    {"name": "mean_depth_km", "type": "double"},
+    {"name": "total_energy_joules", "type": "double"},
+    {"name": "emitted_at_ms", "type": "long"}
+  ]
+}
