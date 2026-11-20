@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,13 @@ from seismic_stream import cli
 from seismic_stream.adapters.kafka.producer import DeliveryError
 from seismic_stream.application.ingest import IngestSummary
 from seismic_stream.config import Settings
+
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(output: str) -> str:
+    """Strip ANSI styling so assertions survive colorized CI runners."""
+    return ANSI_ESCAPE.sub("", output)
 
 
 @dataclass
@@ -115,7 +123,7 @@ def test_invalid_source_is_a_usage_error(monkeypatch) -> None:
     result = CliRunner().invoke(cli.app, ["ingest", "--source", "bogus", "--dry-run"])
 
     assert result.exit_code == 2
-    assert "--source" in result.output
+    assert "--source" in _plain(result.output)
 
 
 def test_invalid_speed_is_a_usage_error(monkeypatch) -> None:
@@ -124,7 +132,7 @@ def test_invalid_speed_is_a_usage_error(monkeypatch) -> None:
     result = CliRunner().invoke(cli.app, ["ingest", "--speed", "fast", "--dry-run"])
 
     assert result.exit_code == 2
-    assert "--speed" in result.output
+    assert "--speed" in _plain(result.output)
 
 
 def test_non_positive_limit_is_a_usage_error(monkeypatch) -> None:
@@ -133,7 +141,7 @@ def test_non_positive_limit_is_a_usage_error(monkeypatch) -> None:
     result = CliRunner().invoke(cli.app, ["ingest", "--limit", "0", "--dry-run"])
 
     assert result.exit_code == 2
-    assert "--limit" in result.output
+    assert "--limit" in _plain(result.output)
 
 
 def test_delivery_errors_exit_with_code_one(monkeypatch) -> None:
@@ -154,4 +162,4 @@ def test_delivery_errors_exit_with_code_one(monkeypatch) -> None:
     result = CliRunner().invoke(cli.app, ["ingest", "--source", "replay", "--dry-run"])
 
     assert result.exit_code == 1
-    assert "lost message" in result.output
+    assert "lost message" in _plain(result.output)
