@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a scoped improvement to the pipeline
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: This project is deliberately local-first and single-node; proposals that fit that scope are welcome.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What limitation or pain point does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behaviour and, if relevant, the ports/adapters involved.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Producer / replay
+        - Stream processing
+        - Storage / sink
+        - Observability
+        - Dashboards
+        - Installers / CI
+        - Documentation
+    validations:
+      required: true

@@ -1,0 +1,70 @@
+# Contributing
+
+Thanks for taking a look at `realtime-seismic-stream`. This guide covers the local
+workflow, the quality gates and the conventions used in this repository.
+
+## Requirements
+
+- Python 3.12 (managed through [uv](https://docs.astral.sh/uv/); see `.python-version`)
+- Docker with Compose v2 for the integration and end-to-end suites
+- `make` is a convenience on Linux and macOS; Windows users run the underlying `uv`
+  commands directly
+
+## Setup
+
+```bash
+uv sync --frozen
+uv run seismic-stream --version
+```
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `make lint` | Ruff lint plus formatting check |
+| `make fmt` | Apply Ruff fixes and formatting |
+| `make types` | `mypy --strict src` |
+| `make arch` | Import-linter hexagonal contracts |
+| `make test` | Unit, property and architecture tests (no Docker) |
+| `make test-int` | Integration tests (Docker required) |
+| `make test-e2e` | End-to-end tests (full stack) |
+| `make cov` | Tests with coverage |
+| `make audit` | `pip-audit` dependency audit |
+| `make ci` | Local equivalent of the CI lint and unit jobs |
+
+Tests never reach the network: `pytest-socket` blocks every host except
+`127.0.0.1`/`::1`. Tests that need a service bind ephemeral ports (port `0`).
+
+## Commit convention
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
+`feat:`, `fix:`, `test:`, `docs:`, `chore:`, `ci:`, `build:`, `refactor:`. Keep each
+commit a coherent, reviewable unit (roughly 400 changed lines or fewer) and keep tests
+and docs in the same commit as the behaviour they describe. No AI attribution lines.
+
+## Architecture rules
+
+The codebase is hexagonal: `domain` has no I/O and no third-party imports,
+`application` depends only on `domain`, and `adapters` depend on both. The
+`cli`/`composition` layer wires everything together. These rules are enforced by
+`import-linter` and by `tests/architecture/test_import_contracts.py`; never weaken a
+contract to make a change pass.
+
+## Type checking overrides
+
+`mypy --strict` runs over `src/`. Any module-level `ignore_missing_imports` override
+must be listed here with the reason.
+
+| Module | Reason |
+|---|---|
+| (none yet) | |
+
+## Tests
+
+Write the failing test first, then the implementation. Do not skip, delete or weaken
+tests to obtain a green run. Property-based tests use Hypothesis profiles: `dev` is the
+default and `ci` (`HYPOTHESIS_PROFILE=ci`) fixes `max_examples=100` and derandomizes.
+
+## License
+
+By contributing you agree that your contribution is licensed under the MIT License.

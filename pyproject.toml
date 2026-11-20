@@ -1,0 +1,149 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "realtime-seismic-stream"
+version = "0.1.0"
+description = "Local real-time earthquake streaming pipeline with offline time-compressed replay"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Eduardo Pacheco" }]
+keywords = ["seismic", "streaming", "kafka", "clickhouse", "data-engineering"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "pydantic-settings",
+  "structlog",
+  "typer",
+]
+
+[project.scripts]
+seismic-stream = "seismic_stream.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/seismic_stream"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/seismic_stream", "README.md", "README.es.md", "LICENSE", "pyproject.toml"]
+
+[dependency-groups]
+dev = [
+  "hypothesis",
+  "import-linter",
+  "mypy",
+  "pip-audit",
+  "pytest",
+  "pytest-cov",
+  "pytest-socket",
+  "respx",
+  "ruff",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+# Documented ignores:
+# - ANN401: `typer` callbacks need `Any` for untyped option values in a few places.
+# - PT011: pytest.raises without `match=` is acceptable for exception-only checks.
+# - RUF012: mutable class attributes are fine for Typer/ClickHouse column mappings.
+# - PLR0913: adapter constructors legitimately receive many collaborating ports.
+# - PLR2004: magic values in tests improve readability.
+# - SIM117: nested context managers are sometimes clearer in integration tests.
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "PL", "RUF", "T20", "C4", "PT", "ANN"]
+ignore = ["ANN401", "PT011", "RUF012", "PLR0913", "PLR2004", "SIM117"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN", "PLR2004"]
+"scripts/**" = ["ANN", "T201"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["seismic_stream"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra --strict-markers --disable-socket --allow-hosts=127.0.0.1,::1"
+testpaths = ["tests"]
+markers = [
+  "unit: fast tests that need no Docker",
+  "integration: tests that need a running Docker Compose subset",
+  "e2e: end-to-end tests that exercise the full stack",
+  "ui: browser tests driven with Playwright",
+]
+
+[tool.coverage.run]
+source = ["src/seismic_stream"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.importlinter]
+root_packages = ["seismic_stream"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Hexagonal layers"
+type = "layers"
+layers = [
+  "seismic_stream.cli | seismic_stream.composition",
+  "seismic_stream.adapters",
+  "seismic_stream.application",
+  "seismic_stream.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "Pure core has no infrastructure imports"
+type = "forbidden"
+source_modules = [
+  "seismic_stream.domain",
+  "seismic_stream.application",
+]
+forbidden_modules = [
+  "confluent_kafka",
+  "quixstreams",
+  "clickhouse_connect",
+  "httpx",
+  "prometheus_client",
+  "structlog",
+  "fastavro",
+  "requests",
+  "urllib3",
+]
+
+[[tool.importlinter.contracts]]
+name = "Adapters are independent (stream may only use kafka)"
+type = "independence"
+modules = [
+  "seismic_stream.adapters.sources",
+  "seismic_stream.adapters.storage",
+  "seismic_stream.adapters.observability",
+  "seismic_stream.adapters.stream",
+]
