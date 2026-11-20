@@ -14,11 +14,12 @@ x-app-env: &app-env
   SEISMIC_LOG_FORMAT: json
 
 # Shared application image for every one-shot and long-running service (D19).
+# Only `bootstrap` declares the build: Compose builds each service that carries
+# a `build:` key independently, so repeating it would re-tag one logical image
+# with a per-service manifest on every run and make a re-install recreate the
+# long-running containers. The other services reuse the tag built here.
 x-app: &app
   image: ${SEISMIC_IMAGE:-realtime-seismic-stream:local}
-  build:
-    context: .
-    dockerfile: docker/app.Dockerfile
   environment: *app-env
   networks:
     - backend
@@ -87,6 +88,9 @@ services:
 
   bootstrap:
     <<: *app
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
     command: ["bootstrap"]
     depends_on:
       redpanda:
