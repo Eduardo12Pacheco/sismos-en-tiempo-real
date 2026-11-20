@@ -11,18 +11,27 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 import uuid
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 import pytest
-from confluent_kafka import Consumer, TopicPartition
+from confluent_kafka import Consumer, Producer, TopicPartition
 from confluent_kafka.admin import AdminClient
 from confluent_kafka.schema_registry import SchemaRegistryClient
 
 from seismic_stream.adapters.kafka.codecs import AlertCodec, WindowStatsCodec
-from seismic_stream.adapters.kafka.topics import AGGREGATES_TOPIC, ALERTS_TOPIC
+from seismic_stream.adapters.kafka.topics import (
+    AGGREGATES_TOPIC,
+    ALERTS_TOPIC,
+    EVENTS_TOPIC,
+)
+from seismic_stream.adapters.sources.chaos import ChaosPolicy, ChaoticSource
+from seismic_stream.adapters.sources.replay import ReplaySource
+from seismic_stream.domain.alerts import AlertPolicy
 from tests.support.reference import reference_result
 
 pytestmark = pytest.mark.integration
@@ -74,6 +83,21 @@ def _run_cli(
         timeout=timeout,
         env=_environment(metrics_port, state_dir),
         check=False,
+    )
+
+
+def _start_cli(
+    *args: str,
+    metrics_port: int,
+    state_dir: Path,
+) -> subprocess.Popen[str]:
+    return subprocess.Popen(
+        _cli_command(*args),
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=_environment(metrics_port, state_dir),
     )
 
 
@@ -213,3 +237,69 @@ def test_clean_replay_aggregates_and_alerts_match_the_reference(tmp_path: Path) 
 
     _assert_aggregates_match_reference(reference)
     _assert_alerts_match_reference(reference)
+
+
+def test_chaos_replay_uses_the_clean_events_and_final_alerts(tmp_path: Path) -> None:
+    _ingest_and_process(tmp_path, chaos=True)
+    policy = ChaosPolicy(seed=42)
+    records = list(ChaoticSource(ReplaySource(SAMPLE), policy).records())
+    reference = reference_result(records=records, policy=AlertPolicy())
+
+    _assert_aggregates_match_reference(reference)
+    _assert_alerts_match_reference(reference)
+
+
+def test_undecodable_bytes_are_skipped_and_readiness_stays_healthy(tmp_path: Path) -> None:
+    producer = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP})
+    producer.produce(EVENTS_TOPIC, key=b"garbage", value=b"\x00not-an-avro-payload")
+    assert producer.flush(15) == 0
+
+    ingested = _run_cli(
+        "ingest",
+        "--source",
+        "replay",
+        "--speed",
+        "max",
+        "--limit",
+        "50",
+        metrics_port=_free_port(),
+        state_dir=tmp_path / "ingest-state",
+    )
+    assert ingested.returncode == 0, ingested.stderr
+
+    metrics_port = _free_port()
+    process = _start_cli(
+        "process",
+        metrics_port=metrics_port,
+        state_dir=tmp_path / "processor-state",
+    )
+    try:
+        deadline = time.monotonic() + 120
+        metrics = ""
+        ready = False
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{metrics_port}/metrics", timeout=2
+                ) as response:
+                    metrics = response.read().decode("utf-8")
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{metrics_port}/readyz", timeout=2
+                ) as response:
+                    ready = response.status == 200
+            except (urllib.error.URLError, TimeoutError):
+                pass
+            if 'seismic_processor_skipped_total{reason="undecodable"}' in metrics and ready:
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError(f"processor did not report the skipped record:\n{metrics}")
+
+        assert 'seismic_processor_skipped_total{reason="undecodable"}' in metrics
+        assert ready is True
+        process.terminate()
+        assert process.wait(timeout=30) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
