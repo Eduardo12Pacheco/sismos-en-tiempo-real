@@ -86,7 +86,11 @@ def _start_stack() -> None:
 
 
 def _replay_and_verify() -> None:
-    replay = run_ingest("--speed", "max")
+    # A finite replay at ``max`` finishes faster than Prometheus' 5 s scrape
+    # interval, so the ingest/sink counters are born at their final value and
+    # ``rate(...[1m])`` has no non-zero sample. Use the documented screenshot
+    # speed (3600x, ~3 minutes) so throughput panels observe real increments.
+    replay = run_ingest("--speed", "3600")
     if replay.returncode != 0:
         pytest.fail(
             "dashboard replay failed:\n"
