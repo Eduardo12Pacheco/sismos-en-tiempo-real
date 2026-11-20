@@ -2,7 +2,9 @@
 
 This document records where the data in `data/samples/` comes from, how it is
 licensed, how the checksum is verified, and which sources were evaluated but
-not integrated.
+not integrated. The runtime flow that consumes this data is described in
+[ARCHITECTURE.md](ARCHITECTURE.md); the commands are in
+[OPERATIONS.md](OPERATIONS.md).
 
 ## Bundled sample
 
@@ -59,21 +61,25 @@ Credit: U.S. Geological Survey
 
 ## Lineage
 
-```text
-USGS FDSN query (recorded 2026-11-19)
-        |
-        v
-data/samples/usgs_2026-11-02_2026-11-09_m1.geojson   (sha256 in SHA256SUMS)
-        |
-        v
-ReplaySource -> SourceRecord(feature, event_time_ms)  (sorted by time, id)
-        |
-        v
-feature_to_event (anti-corruption layer, domain Event)
-        |
-        v
-Avro earthquake_event v1 -> Redpanda -> ClickHouse -> Grafana
+```mermaid
+flowchart LR
+  Q[USGS FDSN query recorded 2026-11-19] --> F[data/samples geojson plus SHA256SUMS]
+  F --> R[ReplaySource sorted by time then id]
+  R --> S[SourceRecord with feature and event_time_ms]
+  S --> N[feature_to_event anti-corruption layer]
+  N --> A[Avro earthquake_event v1]
+  A --> K[(Redpanda seismic.events.v1)]
+  K --> P[processor windows and alerts]
+  K --> C[(ClickHouse ReplacingMergeTree)]
+  P --> C
+  C --> G[Grafana dashboards]
 ```
+
+The domain `Event` is immutable and versioned by `updated_at_ms`: the processor
+drops exact duplicates, treats a strictly newer timestamp as a revision, and the
+sink keeps the newest version in the `events_latest` view. The full contract is
+in [ARCHITECTURE.md](ARCHITECTURE.md#topics-and-schemas) and
+[ADR 0007](adr/0007-replay-event-time-and-data-clock.md).
 
 The optional live mode polls the documented USGS real-time GeoJSON summary
 feeds; it is never used by tests or by the default offline replay.
@@ -89,3 +95,10 @@ feeds; it is never used by tests or by the default offline replay.
 The committed recording contains 1,817 features: 1,739 earthquakes, 36 quarry
 blasts, 22 ice quakes, 19 explosions and 1 "other event". These figures are
 informational; `replay-info` and the tests derive them from the file.
+
+## Related documents
+
+- [Architecture](ARCHITECTURE.md)
+- [Operations](OPERATIONS.md)
+- [ADR 0005: effectively-once delivery](adr/0005-delivery-semantics-effectively-once.md)
+- [ADR 0007: replay, event time and the data clock](adr/0007-replay-event-time-and-data-clock.md)

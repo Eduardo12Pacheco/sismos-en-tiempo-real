@@ -42,6 +42,38 @@ uv run seismic-stream --version
 Tests never reach the network: `pytest-socket` blocks every host except
 `127.0.0.1`/`::1`. Tests that need a service bind ephemeral ports (port `0`).
 
+## Documentation
+
+Documentation is part of the definition of done and is drift-tested by
+`tests/unit/test_docs.py`:
+
+| File | Audience and content |
+|---|---|
+| `README.md`, `README.es.md` | Public pitch, quickstart, limitations; `README.md` stays at 150 lines or fewer |
+| `docs/ARCHITECTURE.md` | Layers, the D28 patterns with their implementing module, data flow, schemas, delivery semantics and scaling path |
+| `docs/DATA.md` | Sample provenance, query, checksum, re-recording, licence and credit |
+| `docs/OPERATIONS.md` | Prerequisites, commands, every environment variable, metrics, ports and troubleshooting |
+| `docs/adr/` | Numbered decisions with status, date and alternatives |
+
+When you change behaviour:
+
+- a new or changed `Settings` field must appear in `.env.example` and in the
+  `docs/OPERATIONS.md` configuration table, named `SEISMIC_<FIELD>`;
+- a new or changed `METRIC_CATALOG` entry must appear in the
+  `docs/OPERATIONS.md` metric table;
+- every ADR keeps the `Status`, `Date`, `Context`, `Decision`, `Consequences` and
+  `Alternatives considered` sections;
+- relative links must resolve, Mermaid blocks must start with a known diagram
+  keyword and keep balanced delimiters, and no `TODO`/`TBD`/`FIXME`/`lorem`
+  placeholder may survive;
+- benchmark numbers belong only in the generated `docs/BENCHMARKS.md`.
+
+Run the checks with:
+
+```bash
+uv run pytest tests/unit/test_docs.py -q
+```
+
 ## Commit convention
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/):

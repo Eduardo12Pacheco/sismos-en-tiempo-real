@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-20
+- **Related:** [Architecture](../ARCHITECTURE.md) · [Operations](../OPERATIONS.md) · [ADR 0005](0005-delivery-semantics-effectively-once.md)
 
 ## Context
 

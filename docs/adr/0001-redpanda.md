@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-20
+- **Related:** [Architecture](../ARCHITECTURE.md) · [Operations](../OPERATIONS.md) · [ADR 0003](0003-avro-schema-registry.md)
 
 ## Context
 

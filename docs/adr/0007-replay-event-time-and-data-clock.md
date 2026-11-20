@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-20
+- **Related:** [Architecture](../ARCHITECTURE.md) · [Data](../DATA.md) · [ADR 0008](0008-grafana-dashboards-as-code.md)
 
 ## Context
 

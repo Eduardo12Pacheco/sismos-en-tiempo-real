@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-20
+- **Related:** [Architecture](../ARCHITECTURE.md) · [Operations](../OPERATIONS.md) · [ADR 0007](0007-replay-event-time-and-data-clock.md)
 
 ## Context
 

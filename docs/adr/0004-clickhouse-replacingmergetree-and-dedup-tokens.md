@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-11-20
+- **Related:** [Architecture](../ARCHITECTURE.md) · [ADR 0005](0005-delivery-semantics-effectively-once.md) · [ADR 0006](0006-dead-letter-channel-and-backpressure.md)
 
 ## Context
 
