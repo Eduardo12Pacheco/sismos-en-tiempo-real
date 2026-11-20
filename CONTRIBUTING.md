@@ -57,7 +57,7 @@ must be listed here with the reason.
 
 | Module | Reason |
 |---|---|
-| (none yet) | |
+| `confluent_kafka` (and submodules) | Ships no PEP 561 marker or stubs; typed wrappers live in `adapters/kafka`. |
 
 ## Tests
 
