@@ -19,6 +19,7 @@ from seismic_stream.domain.models import (
     WindowStats,
     dlq_id,
 )
+from seismic_stream.domain.normalize import feature_to_event
 from seismic_stream.domain.versioning import supersedes
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "ValidationReason",
     "WindowStats",
     "dlq_id",
+    "feature_to_event",
     "in_ecuador_region",
     "radiated_energy_joules",
     "region_from_place",
