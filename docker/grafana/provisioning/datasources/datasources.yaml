@@ -1,0 +1,28 @@
+apiVersion: 1
+
+# Grafana resolves $__env{VAR} in provisioning files. Compose injects the same
+# SEISMIC_CLICKHOUSE_* variables the application services use, so the dashboard
+# never contains a hard-coded credential.
+datasources:
+  - name: ClickHouse
+    uid: clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      host: clickhouse
+      port: 8123
+      protocol: http
+      username: $__env{SEISMIC_CLICKHOUSE_USER}
+      defaultDatabase: seismic
+    secureJsonData:
+      password: $__env{SEISMIC_CLICKHOUSE_PASSWORD}
+    editable: false
+
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    isDefault: false
+    url: http://prometheus:9090
+    editable: false

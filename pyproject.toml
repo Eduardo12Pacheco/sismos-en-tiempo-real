@@ -52,6 +52,10 @@ dev = [
   "respx",
   "ruff",
 ]
+ui = [
+    "pillow>=13.0.0",
+    "playwright>=1.65.2",
+]
 
 [tool.uv]
 default-groups = ["dev"]

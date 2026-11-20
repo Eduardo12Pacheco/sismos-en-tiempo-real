@@ -171,6 +171,47 @@ services:
     networks:
       - backend
 
+  grafana:
+    image: realtime-seismic-stream-grafana:local
+    build:
+      context: .
+      dockerfile: docker/grafana/Dockerfile
+    ports:
+      - "127.0.0.1:13000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_NAME: Main Org.
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/seismic-live.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      # The feature-toggle audit line contains both "error" and "provision"
+      # substrings and would pollute provisioning error checks; keep it quiet.
+      GF_LOG_FILTERS: featuremgmt:error
+      SEISMIC_CLICKHOUSE_USER: ${SEISMIC_CLICKHOUSE_USER:-seismic}
+      SEISMIC_CLICKHOUSE_PASSWORD: ${SEISMIC_CLICKHOUSE_PASSWORD:-seismic-local}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning/datasources/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./docker/grafana/provisioning/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+    networks:
+      - backend
+      - edge
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+
   cli:
     <<: *app
     profiles: ["tools"]
@@ -200,4 +241,5 @@ volumes:
   redpanda-data:
   clickhouse-data:
   prometheus-data:
+  grafana-data:
   processor-state:

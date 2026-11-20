@@ -1,0 +1,17 @@
+apiVersion: 1
+
+# Dashboards-as-code: the JSON files under docker/grafana/dashboards are the
+# only source of truth. UI edits are disabled so the committed generator output
+# and the running dashboards cannot drift (S16).
+providers:
+  - name: seismic-stream
+    orgId: 1
+    folder: Seismic
+    folderUid: seismic
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
