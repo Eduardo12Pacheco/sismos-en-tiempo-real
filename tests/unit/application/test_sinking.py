@@ -67,16 +67,23 @@ class Write:
 
 
 class FakeStore:
-    def __init__(self, *, failures: int = 0, poison_ids: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        failures: int = 0,
+        poison_ids: set[str] | None = None,
+        transient_attempts: set[int] | None = None,
+    ) -> None:
         self.failures = failures
         self.poison_ids = poison_ids or set()
+        self.transient_attempts = transient_attempts or set()
         self.writes: list[Write] = []
         self.attempts = 0
 
     def _write(self, table: str, rows: Sequence[Any], token: str) -> None:
         self.attempts += 1
-        if self.failures > 0:
-            self.failures -= 1
+        if self.attempts in self.transient_attempts or self.failures > 0:
+            self.failures = max(0, self.failures - 1)
             raise TransientStoreError("connection refused")
         if any(getattr(row, "event_id", None) in self.poison_ids for row in rows):
             raise PermanentStoreError("cannot parse row")
@@ -247,6 +254,34 @@ def test_permanent_failure_bisects_batch_and_dead_letters_only_poison() -> None:
     assert summary.rows == 4
     assert summary.dead_letters == 1
     assert consumer.commits == [{("seismic.events.v1", 0): 5}]
+
+
+def test_transient_error_during_bisection_is_retried_without_losing_rows() -> None:
+    events = [make_event(event_id=f"e{i}") for i in range(4)]
+    values = {f"e{i}".encode(): event for i, event in enumerate(events)}
+    consumer = FakeConsumer([[_record(i, f"e{i}".encode()) for i in range(4)]])
+    # Attempts 1 and 2 hit the poison parent and its bisection parent; attempt 3
+    # is a healthy half and fails transiently once before succeeding.
+    store = FakeStore(poison_ids={"e3"}, transient_attempts={3})
+    letters = FakeDeadLetters()
+    metrics = FakeMetrics()
+    service = _service(
+        consumer,
+        store,
+        letters,
+        metrics,
+        FakeClock(),
+        {"seismic.events.v1": FakeCodec(values)},
+    )
+
+    summary = service.run(max_batches=1)
+
+    stored = [row.event_id for write in store.writes for row in write.rows]
+    assert sorted(stored) == ["e0", "e1", "e2"]
+    assert [letter.stage for letter in letters.letters] == [DlqStage.SINK_PERSIST]
+    assert metrics.retries == 1
+    assert metrics.paused == [True, False]
+    assert summary.rows == 3
 
 
 def test_undecodable_record_goes_to_sink_decode_with_raw_payload() -> None:

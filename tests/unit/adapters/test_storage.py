@@ -218,6 +218,17 @@ def test_empty_insert_is_not_sent_to_clickhouse() -> None:
     assert client.inserted == []
 
 
+def test_invalid_timestamp_is_a_permanent_store_error() -> None:
+    store = ClickHouseStore(cast(Client, FakeClient()))
+
+    with pytest.raises(PermanentStoreError):
+        store.insert_events(
+            [make_event(event_time_ms=10**18)],
+            ingested_at_ms=[1],
+            token="bad-time",
+        )
+
+
 def test_mismatched_event_and_header_lengths_are_rejected() -> None:
     store = ClickHouseStore(cast(Client, FakeClient()))
 

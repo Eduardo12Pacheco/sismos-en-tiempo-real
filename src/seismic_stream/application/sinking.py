@@ -230,38 +230,40 @@ class SinkService:
         attempt = 0
         retried = False
         paused = False
-        while True:
-            try:
-                self._write_chunk(table, rows, token)
-            except TransientStoreError:
-                retried = True
-                if not paused:
-                    self._consumer.pause()
-                    self._metrics.set_sink_paused(True)
-                    paused = True
-                self._metrics.record_sink_retry()
-                self._clock.sleep(self._retry_policy.delay(attempt, self._rng))
-                attempt += 1
-                continue
-            except PermanentStoreError:
-                if paused:
-                    self._consumer.resume()
-                    self._metrics.set_sink_paused(False)
-                result = bisect_write(
-                    rows,
-                    lambda chunk, suffix: self._write_chunk(table, chunk, token + suffix),
+
+        def write_chunk(chunk: Sequence[_Row], suffix: str) -> None:
+            nonlocal attempt, retried, paused
+            while True:
+                try:
+                    self._write_chunk(table, chunk, token + suffix)
+                except TransientStoreError:
+                    retried = True
+                    if not paused:
+                        self._consumer.pause()
+                        self._metrics.set_sink_paused(True)
+                        paused = True
+                    self._metrics.record_sink_retry()
+                    self._clock.sleep(self._retry_policy.delay(attempt, self._rng))
+                    attempt += 1
+                    continue
+                return
+
+        try:
+            write_chunk(rows, "")
+        except PermanentStoreError:
+            result = bisect_write(rows, write_chunk)
+            for row in result.rejected:
+                self._dead_letter(
+                    row.record,
+                    "permanent_store_error",
+                    "ClickHouse rejected the row permanently",
                 )
-                for row in result.rejected:
-                    self._dead_letter(
-                        row.record,
-                        "permanent_store_error",
-                        "ClickHouse rejected the row permanently",
-                    )
-                return "bisected"
+            return "bisected"
+        finally:
             if paused:
                 self._consumer.resume()
                 self._metrics.set_sink_paused(False)
-            return "retried" if retried else "ok"
+        return "retried" if retried else "ok"
 
     def _write_chunk(self, table: str, rows: Sequence[_Row], token: str) -> None:
         started = self._clock.now()

@@ -18,6 +18,7 @@ from clickhouse_connect.driver.client import Client
 from seismic_stream.adapters.clock import SystemClock
 from seismic_stream.adapters.storage.migrations import classify_clickhouse_error
 from seismic_stream.application.ports import Clock
+from seismic_stream.application.retry import PermanentStoreError
 from seismic_stream.config import Settings
 from seismic_stream.domain.models import Alert, DeadLetter, Event, WindowStats
 
@@ -239,4 +240,7 @@ class ClickHouseStore:
 
 
 def _dt(milliseconds: int) -> datetime:
-    return datetime.fromtimestamp(milliseconds / 1000, tz=UTC)
+    try:
+        return datetime.fromtimestamp(milliseconds / 1000, tz=UTC)
+    except (OverflowError, OSError, ValueError) as error:
+        raise PermanentStoreError(f"invalid timestamp {milliseconds}") from error
