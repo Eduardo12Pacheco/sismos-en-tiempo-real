@@ -12,10 +12,15 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  HYPOTHESIS_PROFILE: ci
+  UV_LINK_MODE: copy
+
 jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
@@ -34,10 +39,23 @@ jobs:
         run: uv lock --check
       - name: Import contracts
         run: uv run lint-imports
+      - name: ShellCheck installer
+        run: shellcheck install.sh
+      - name: Compose configuration
+        run: |
+          docker compose config -q
+          docker compose -f compose.yaml -f compose.test.yaml config -q
+          docker compose -f compose.yaml -f compose.live.yaml config -q
+          docker compose -f compose.yaml -f compose.test.yaml -f compose.live.yaml config -q
+      - name: Dashboards are generated
+        run: uv run python scripts/build_dashboards.py --check
+      - name: Actionlint
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest
 
   unit:
     name: unit (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -52,3 +70,134 @@ jobs:
         run: uv sync --frozen
       - name: Run unit, property and architecture tests
         run: uv run pytest -m "not integration and not e2e and not ui"
+
+  integration-e2e:
+    name: integration, e2e and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SEISMIC_REQUIRE_DOCKER: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked environment with UI tools
+        run: uv sync --frozen --group ui
+      - name: Install Playwright Chromium
+        run: uv run playwright install --with-deps chromium
+      - name: Run the full suite with the coverage gate
+        run: >-
+          uv run pytest --cov=src/seismic_stream --cov-report=xml
+          --cov-report=term-missing --cov-fail-under=85
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml -f compose.test.yaml logs --no-color > compose-logs.txt || true
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+      - name: Upload Compose logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compose-logs
+          path: compose-logs.txt
+          if-no-files-found: ignore
+
+  installer:
+    name: installer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check prerequisites (ubuntu)
+        if: runner.os == 'Linux'
+        run: ./install.sh --check
+      - name: Full install and instant replay (ubuntu)
+        if: runner.os == 'Linux'
+        env:
+          SEISMIC_REPLAY_SPEED: max
+        run: ./install.sh
+      - name: Wait for the replay to finish (ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          container="$(docker compose ps -a -q ingest)"
+          if [ -z "$container" ]; then
+            docker compose logs --no-color ingest
+            exit 1
+          fi
+          code="$(timeout 600 docker wait "$container")"
+          docker compose logs --no-color ingest
+          if [ "$code" != "0" ]; then
+            exit 1
+          fi
+      - name: Verify every event was stored (ubuntu)
+        if: runner.os == 'Linux'
+        run: docker compose run --rm cli verify --timeout 180
+      - name: Stop the stack (ubuntu)
+        if: always() && runner.os == 'Linux'
+        run: ./install.sh --down
+      - name: Install PSScriptAnalyzer (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Import-Module PSScriptAnalyzer
+          $findings = Invoke-ScriptAnalyzer -Path ./install.ps1 -Severity Error, Warning
+          if ($findings) {
+            $findings | Format-Table RuleName, Severity, Line, Message -AutoSize
+            throw "PSScriptAnalyzer reported findings"
+          }
+      - name: Check prerequisites as JSON (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $raw = (& ./install.ps1 -Check -Json) -join "`n"
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0 -and $exitCode -ne 1) {
+            throw "install.ps1 -Check returned unexpected exit code $exitCode"
+          }
+          $payload = $raw | ConvertFrom-Json
+          if ($null -eq $payload.checks -or $null -eq $payload.ok) {
+            throw "install.ps1 -Check -Json did not return the documented shape"
+          }
+          $shell = $payload.checks | Where-Object { $_.id -eq 'shell' }
+          if ($null -eq $shell -or $shell.status -ne 'pass') {
+            throw "the shell prerequisite did not pass"
+          }
+          Write-Output "installer JSON parsed (ok=$($payload.ok), exit=$exitCode)"
+
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked environment
+        run: uv sync --frozen
+      - name: Dependency audit
+        run: |
+          uv export --frozen --no-emit-project --no-hashes -o req.txt
+          uvx pip-audit -r req.txt --no-deps --disable-pip
