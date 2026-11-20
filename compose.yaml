@@ -13,6 +13,8 @@ x-app: &app
     PYTHONWARNINGS: "ignore::DeprecationWarning"
     SEISMIC_KAFKA_BOOTSTRAP: redpanda:9092
     SEISMIC_SCHEMA_REGISTRY_URL: http://redpanda:8081
+    SEISMIC_CLICKHOUSE_HOST: clickhouse
+    SEISMIC_CLICKHOUSE_PORT: "8123"
     SEISMIC_LOG_FORMAT: json
   networks:
     - backend
@@ -58,11 +60,34 @@ services:
     networks:
       - backend
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8
+    environment:
+      CLICKHOUSE_USER: ${SEISMIC_CLICKHOUSE_USER:-seismic}
+      CLICKHOUSE_PASSWORD: ${SEISMIC_CLICKHOUSE_PASSWORD:-seismic-local}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+    networks:
+      - backend
+
   bootstrap:
     <<: *app
     command: ["bootstrap"]
     depends_on:
       redpanda:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
 
   processor:
@@ -110,4 +135,5 @@ networks:
 
 volumes:
   redpanda-data:
+  clickhouse-data:
   processor-state:

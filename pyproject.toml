@@ -20,6 +20,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "clickhouse-connect>=1.13,<1.14",
   "confluent-kafka[avro,schemaregistry]>=2.12,<2.13",
   "fastavro>=1.13.1",
   "httpx>=0.28,<0.29",

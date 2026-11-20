@@ -5,6 +5,7 @@ from __future__ import annotations
 from seismic_stream.adapters.kafka.admin import TopicAdminResult
 from seismic_stream.adapters.kafka.bootstrap import run
 from seismic_stream.adapters.kafka.topics import SUBJECTS, TOPIC_SPECS, TopicSpec
+from seismic_stream.adapters.storage.migrations import MigrationResult
 from seismic_stream.config import Settings
 
 
@@ -37,6 +38,17 @@ class FakeRegistryAdmin:
         return "unchanged"
 
 
+class FakeStorage:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def apply(self) -> MigrationResult:
+        self.calls += 1
+        if self.calls == 1:
+            return MigrationResult(applied=("001_database",), skipped=())
+        return MigrationResult(applied=(), skipped=("001_database",))
+
+
 def _settings() -> Settings:
     return Settings(
         kafka_bootstrap="redpanda:9092",
@@ -49,7 +61,8 @@ def test_first_run_creates_every_topic_and_subject() -> None:
     topics = FakeTopicAdmin()
     registry = FakeRegistryAdmin()
 
-    result = run(_settings(), topics=topics, registry=registry)
+    storage = FakeStorage()
+    result = run(_settings(), topics=topics, registry=registry, storage=storage)
 
     assert topics.received == TOPIC_SPECS
     assert result.topics.created == tuple(spec.name for spec in TOPIC_SPECS)
@@ -58,17 +71,25 @@ def test_first_run_creates_every_topic_and_subject() -> None:
         "created": list(SUBJECTS),
         "unchanged": [],
     }
-    assert result.as_dict()["clickhouse"] == "skipped"
+    assert result.as_dict()["clickhouse"] == {
+        "applied": ["001_database"],
+        "skipped": [],
+    }
     assert set(registry.subjects) == set(SUBJECTS)
 
 
 def test_second_run_reports_everything_unchanged() -> None:
     topics = FakeTopicAdmin()
     registry = FakeRegistryAdmin()
-    run(_settings(), topics=topics, registry=registry)
+    storage = FakeStorage()
+    run(_settings(), topics=topics, registry=registry, storage=storage)
 
-    result = run(_settings(), topics=topics, registry=registry)
+    result = run(_settings(), topics=topics, registry=registry, storage=storage)
 
     assert result.topics.created == ()
     assert result.topics.unchanged == tuple(spec.name for spec in TOPIC_SPECS)
     assert result.as_dict()["subjects"] == {"created": [], "unchanged": list(SUBJECTS)}
+    assert result.as_dict()["clickhouse"] == {
+        "applied": [],
+        "skipped": ["001_database"],
+    }

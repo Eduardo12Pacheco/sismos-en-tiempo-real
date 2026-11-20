@@ -9,5 +9,12 @@ services:
       - backend
       - edge
 
+  clickhouse:
+    ports:
+      - "127.0.0.1:13123:8123"
+    networks:
+      - backend
+      - edge
+
 networks:
   edge: {}

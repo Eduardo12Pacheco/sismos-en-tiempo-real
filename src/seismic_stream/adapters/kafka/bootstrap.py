@@ -9,7 +9,7 @@ the summary records that step as skipped.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final, Protocol
 
 from confluent_kafka.schema_registry import SchemaRegistryClient
@@ -25,6 +25,11 @@ from seismic_stream.adapters.kafka.topics import (
     SUBJECTS,
     TOPIC_SPECS,
     TopicSpec,
+)
+from seismic_stream.adapters.storage.migrations import (
+    ClickHouseMigrator,
+    MigrationResult,
+    StorageMigrator,
 )
 from seismic_stream.config import Settings
 
@@ -80,7 +85,9 @@ class BootstrapResult:
     topics: TopicAdminResult
     subjects: tuple[SubjectResult, ...]
     compatibility: tuple[CompatibilityResult, ...]
-    clickhouse: str = "skipped"
+    clickhouse: MigrationResult = field(
+        default_factory=lambda: MigrationResult(applied=(), skipped=())
+    )
 
     def as_dict(self) -> dict[str, object]:
         """Render a stable, machine-readable summary."""
@@ -102,7 +109,7 @@ class BootstrapResult:
                     result.subject for result in self.compatibility if result.action == "unchanged"
                 ],
             },
-            "clickhouse": self.clickhouse,
+            "clickhouse": self.clickhouse.as_dict(),
         }
 
 
@@ -111,6 +118,7 @@ def run(
     *,
     topics: TopicEnsurer | None = None,
     registry: SubjectEnsurer | None = None,
+    storage: StorageMigrator | None = None,
 ) -> BootstrapResult:
     """Create topics, register Avro subjects and enforce BACKWARD compatibility."""
     topic_admin = topics or TopicAdmin(settings.kafka_bootstrap)
@@ -135,14 +143,11 @@ def run(
             )
         )
 
+    migrator = storage or ClickHouseMigrator.from_settings(settings)
+
     return BootstrapResult(
         topics=topic_result,
         subjects=tuple(subject_results),
         compatibility=tuple(compatibility_results),
-        clickhouse=_ensure_storage(),
+        clickhouse=migrator.apply(),
     )
-
-
-def _ensure_storage() -> str:
-    """Hook for the ClickHouse DDL step; the sink adapter supplies it in T9."""
-    return "skipped"
