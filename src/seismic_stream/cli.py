@@ -29,11 +29,14 @@ from seismic_stream.adapters.observability.server import (
 from seismic_stream.adapters.sources.replay import ReplaySource
 from seismic_stream.application.ingest import IngestSummary
 from seismic_stream.application.ports import SourceError
+from seismic_stream.application.retry import StoreError
 from seismic_stream.composition import (
     IngestSession,
     ProcessorSession,
+    SinkSession,
     build_ingest_session,
     build_processor_session,
+    build_sink_session,
 )
 from seismic_stream.config import (
     SERVICE_METRICS_PORTS,
@@ -243,6 +246,51 @@ def process(
     finally:
         if server is not None:
             server.stop()
+
+
+@app.command()
+def sink(
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            help="Stop after N idle seconds without messages (0 waits for SIGTERM).",
+            metavar="SECONDS",
+        ),
+    ] = 0.0,
+) -> None:
+    """Consume events, aggregates, alerts and dead letters into ClickHouse."""
+    settings = _load_settings()
+    if timeout < 0:
+        raise typer.BadParameter("must be zero or positive", param_hint="--timeout")
+
+    configure_logging("sink", settings.log_level, settings.log_format)
+    shutdown = ShutdownSignal()
+    server: ObservabilityServer | None = None
+    session: SinkSession | None = None
+    try:
+        with shutdown:
+            session = build_sink_session(settings)
+            server = ObservabilityServer(
+                _service_metrics_port(settings, "sink"),
+                session.metrics.registry,
+                lambda: Readiness(ready=True),
+            )
+            server.start()
+            summary = session.service.run(
+                shutdown.stop_event,
+                idle_timeout_seconds=timeout if timeout > 0 else None,
+            )
+    except (KafkaException, SchemaRegistryError, StoreError) as exc:
+        typer.echo(f"error: sink failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    finally:
+        if server is not None:
+            server.stop()
+        if session is not None:
+            session.shutdown()
+
+    typer.echo(json.dumps(summary.as_dict(), sort_keys=True))
 
 
 def _service_metrics_port(settings: Settings, service: str) -> int:

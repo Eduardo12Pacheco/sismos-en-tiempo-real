@@ -20,17 +20,30 @@ from quixstreams import Application
 
 from seismic_stream import __version__
 from seismic_stream.adapters.clock import SystemClock
-from seismic_stream.adapters.kafka.codecs import DeadLetterCodec, EventCodec
+from seismic_stream.adapters.kafka.codecs import (
+    AlertCodec,
+    DeadLetterCodec,
+    EventCodec,
+    WindowStatsCodec,
+)
+from seismic_stream.adapters.kafka.consumer import KafkaBatchConsumer
 from seismic_stream.adapters.kafka.producer import (
     KafkaDeadLetterPublisher,
     KafkaEventPublisher,
     ResilientProducer,
     producer_config,
 )
+from seismic_stream.adapters.kafka.topics import (
+    AGGREGATES_TOPIC,
+    ALERTS_TOPIC,
+    DLQ_TOPIC,
+    EVENTS_TOPIC,
+)
 from seismic_stream.adapters.observability.metrics import PrometheusMetrics
 from seismic_stream.adapters.sources.chaos import ChaosPolicy, ChaoticSource
 from seismic_stream.adapters.sources.replay import ReplaySource
 from seismic_stream.adapters.sources.usgs_live import UsgsLiveSource, default_user_agent
+from seismic_stream.adapters.storage.clickhouse import ClickHouseStore
 from seismic_stream.adapters.stream.topology import build_application, build_topology
 from seismic_stream.application.ingest import (
     IngestService,
@@ -38,7 +51,9 @@ from seismic_stream.application.ingest import (
     InMemoryEventPublisher,
 )
 from seismic_stream.application.pacing import ReplayPacer
-from seismic_stream.application.ports import Clock, EventSource
+from seismic_stream.application.ports import BatchConsumer, Clock, EventSource
+from seismic_stream.application.retry import RetryPolicy
+from seismic_stream.application.sinking import SinkService
 from seismic_stream.config import Settings
 
 SOURCE_NAMES = ("replay", "usgs")
@@ -185,3 +200,67 @@ def build_processor_session(settings: Settings) -> ProcessorSession:
     application = build_application(settings, metrics)
     build_topology(application, settings, metrics)
     return ProcessorSession(application=application, metrics=metrics)
+
+
+@dataclass(slots=True)
+class SinkSession:
+    """Sink service plus the adapters it owns and their cleanup hook."""
+
+    service: SinkService
+    metrics: PrometheusMetrics
+    consumer: BatchConsumer
+    _closer: Callable[[], None] | None = field(default=None, repr=False)
+
+    def shutdown(self) -> None:
+        """Close the consumer and flush any queued dead letters."""
+        self.consumer.close()
+        if self._closer is not None:
+            self._closer()
+            self._closer = None
+
+
+def build_sink_session(
+    settings: Settings,
+    *,
+    consumer: BatchConsumer | None = None,
+    store: ClickHouseStore | None = None,
+) -> SinkSession:
+    """Wire the sink use case, the Kafka consumer and the ClickHouse repository."""
+    metrics = build_metrics("sink")
+    kafka_consumer = consumer or KafkaBatchConsumer.from_config(
+        settings.kafka_bootstrap, "seismic-sink"
+    )
+    kafka_consumer.subscribe((EVENTS_TOPIC, AGGREGATES_TOPIC, ALERTS_TOPIC, DLQ_TOPIC))
+    clickhouse = store or ClickHouseStore.from_settings(settings)
+
+    registry = SchemaRegistryClient({"url": settings.schema_registry_url})
+    producer = ResilientProducer(
+        Producer(producer_config(settings.kafka_bootstrap, settings.producer_queue_max_messages)),
+        metrics,
+    )
+    dead_letters = KafkaDeadLetterPublisher(producer, DeadLetterCodec(registry))
+    service = SinkService(
+        consumer=kafka_consumer,
+        store=clickhouse,
+        dead_letters=dead_letters,
+        metrics=metrics,
+        clock=SystemClock(),
+        retry_policy=RetryPolicy(
+            base_seconds=settings.retry_base_seconds,
+            max_seconds=settings.retry_max_seconds,
+        ),
+        codecs={
+            EVENTS_TOPIC: EventCodec(registry),
+            AGGREGATES_TOPIC: WindowStatsCodec(registry),
+            ALERTS_TOPIC: AlertCodec(registry),
+            DLQ_TOPIC: DeadLetterCodec(registry),
+        },
+        batch_size=settings.sink_batch_size,
+        batch_max_wait_seconds=settings.sink_batch_max_wait_seconds,
+    )
+    return SinkSession(
+        service=service,
+        metrics=metrics,
+        consumer=kafka_consumer,
+        _closer=producer.flush,
+    )
