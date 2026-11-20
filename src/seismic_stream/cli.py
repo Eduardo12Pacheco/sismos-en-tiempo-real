@@ -11,8 +11,13 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+from confluent_kafka import KafkaException
+from confluent_kafka.schema_registry import SchemaRegistryError
 
 from seismic_stream import __version__
+from seismic_stream.adapters.kafka.bootstrap import run as run_bootstrap
+from seismic_stream.adapters.kafka.registry import SchemaConflictError
+from seismic_stream.adapters.observability.logging import configure_logging
 from seismic_stream.adapters.sources.replay import ReplaySource
 from seismic_stream.application.ports import SourceError
 from seismic_stream.config import ConfigError, Settings, load_settings
@@ -57,6 +62,19 @@ def main(
 def version() -> None:
     """Print the installed version."""
     typer.echo(f"seismic-stream {__version__}")
+
+
+@app.command()
+def bootstrap() -> None:
+    """Create topics, register Avro schemas and enforce BACKWARD compatibility."""
+    settings = _load_settings()
+    configure_logging("bootstrap", settings.log_level, settings.log_format)
+    try:
+        result = run_bootstrap(settings)
+    except (KafkaException, SchemaRegistryError, SchemaConflictError) as exc:
+        typer.echo(f"error: bootstrap failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(json.dumps(result.as_dict(), sort_keys=True))
 
 
 @app.command()
