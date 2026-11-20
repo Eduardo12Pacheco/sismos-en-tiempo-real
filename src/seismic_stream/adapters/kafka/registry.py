@@ -20,8 +20,8 @@ class SchemaConflictError(RuntimeError):
 
 
 def _is_not_found(error: SchemaRegistryError) -> bool:
-    """Return whether a registry error means "subject has no versions yet"."""
-    return bool(error.http_status_code == 404 or error.error_code == 40401)
+    """Return whether an error means a subject or its config does not exist yet."""
+    return bool(error.http_status_code == 404 or error.error_code in {40401, 40408})
 
 
 def _schemas_match(registered: str, expected: str) -> bool:
@@ -61,7 +61,12 @@ class SchemaRegistryAdmin:
 
     def set_compatibility(self, subject: str, level: str = COMPATIBILITY_LEVEL) -> str:
         """Set the subject compatibility level, reporting ``updated``/``unchanged``."""
-        current = self._client.get_compatibility(subject)
+        try:
+            current = self._client.get_compatibility(subject)
+        except SchemaRegistryError as error:
+            if not _is_not_found(error):
+                raise
+            current = None
         if current == level:
             return "unchanged"
         self._client.set_compatibility(subject_name=subject, level=level)
