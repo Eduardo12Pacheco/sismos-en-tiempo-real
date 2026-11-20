@@ -11,6 +11,8 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from seismic_stream.domain.models import DeadLetter, Event
+
 
 class SourceError(Exception):
     """Raised when an event source cannot be read or yields unusable data."""
@@ -27,6 +29,30 @@ class SourceRecord:
     feature: Mapping[str, Any]
     event_time_ms: int | None
     injected: bool = field(default=False, compare=False)
+
+
+class EventPublisher(Protocol):
+    """Sink for validated events, with delivery flushing owned by the adapter."""
+
+    def publish(self, event: Event, headers: Mapping[str, str]) -> None:
+        """Enqueue ``event`` with Kafka headers; backpressure is adapter-owned."""
+        ...
+
+    def flush(self, timeout: float | None = None) -> None:
+        """Wait for queued deliveries, raising a typed delivery error on failure."""
+        ...
+
+
+class DeadLetterPublisher(Protocol):
+    """Sink for records that could not be validated or stored."""
+
+    def publish(self, letter: DeadLetter) -> None:
+        """Publish one dead letter with a deterministic ``dlq_id`` key."""
+        ...
+
+    def flush(self, timeout: float | None = None) -> None:
+        """Wait for queued dead letters, raising a typed delivery error on failure."""
+        ...
 
 
 class Clock(Protocol):
