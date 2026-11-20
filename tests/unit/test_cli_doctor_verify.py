@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from seismic_stream import cli
 from seismic_stream.adapters.diagnostics import CheckResult
 from seismic_stream.config import Settings
+from tests.e2e.helpers import SAMPLE, sample_earthquake_ids
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -132,3 +133,72 @@ def test_doctor_and_verify_help_document_their_options() -> None:
     assert verify.exit_code == 0
     for option in ("--file", "--timeout", "--json"):
         assert option in _plain(verify.output)
+
+
+class FakeServer:
+    instances: list[FakeServer] = []
+
+    def __init__(self, port: int, registry: object, readiness: object) -> None:
+        self.port = port
+        self.started = False
+        self.stopped = False
+        FakeServer.instances.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
+class FakeMonitor:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def run(self, stop: object) -> int:
+        self.calls += 1
+        return 3
+
+
+class FakeMonitorSession:
+    def __init__(self) -> None:
+        self.monitor = FakeMonitor()
+        self.metrics = type("Metrics", (), {"registry": object()})()
+        self.closed = False
+
+    def shutdown(self) -> None:
+        self.closed = True
+
+
+def test_monitor_serves_its_metrics_port_and_reports_poll_count(monkeypatch) -> None:
+    FakeServer.instances = []
+    session = FakeMonitorSession()
+    monkeypatch.setattr(cli, "_load_settings", _settings)
+    monkeypatch.setattr(cli, "configure_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli, "build_monitor_session", lambda _settings: session)
+    monkeypatch.setattr(cli, "ObservabilityServer", FakeServer)
+
+    result = CliRunner().invoke(cli.app, ["monitor"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == {"polls": 3}
+    assert FakeServer.instances[0].port == 9104
+    assert FakeServer.instances[0].started is True
+    assert FakeServer.instances[0].stopped is True
+    assert session.closed is True
+
+
+def test_verify_plain_output_lists_missing_ids(monkeypatch) -> None:
+    _install_verify(monkeypatch, {"a"})
+
+    result = CliRunner().invoke(cli.app, ["verify", "--timeout", "0"])
+
+    assert result.exit_code == 1
+    output = _plain(result.output)
+    assert "1/2 events stored" in output
+    assert "missing ids:" in output
+    assert "- b" in output
+
+
+def test_earthquake_ids_ignore_filtered_types_and_invalid_features() -> None:
+    assert cli._earthquake_ids(SAMPLE) == sample_earthquake_ids()

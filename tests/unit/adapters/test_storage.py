@@ -37,6 +37,8 @@ class FakeResult:
 @dataclass
 class FakeClient:
     existing: set[str] = field(default_factory=set)
+    events: set[str] = field(default_factory=set)
+    closed: bool = False
     commands: list[str] = field(default_factory=list)
     inserted: list[tuple[str, list[list[Any]], list[str], dict[str, Any]]] = field(
         default_factory=list
@@ -46,8 +48,15 @@ class FakeClient:
         self.commands.append(cmd)
         return ""
 
-    def query(self, query: str) -> FakeResult:
+    def query(self, query: str, parameters: dict[str, Any] | None = None) -> FakeResult:
+        if "system.tables" in query:
+            return FakeResult(result_rows=[(table,) for table in sorted(self.existing)])
+        if "events_latest" in query:
+            return FakeResult(result_rows=[(event_id,) for event_id in sorted(self.events)])
         return FakeResult(result_rows=[(version,) for version in sorted(self.existing)])
+
+    def close(self) -> None:
+        self.closed = True
 
     def insert(
         self,
@@ -234,3 +243,15 @@ def test_mismatched_event_and_header_lengths_are_rejected() -> None:
 
     with pytest.raises(ValueError, match="same length"):
         store.insert_events([make_event()], ingested_at_ms=[], token="bad")
+
+
+def test_store_ping_listing_and_event_ids_use_the_client() -> None:
+    client = FakeClient(existing={"events", "events_latest"}, events={"a", "b"})
+    store = ClickHouseStore(cast(Client, client), database="seismic")
+
+    store.ping()
+    assert store.table_names() == {"events", "events_latest"}
+    assert store.event_ids() == {"a", "b"}
+
+    store.close()
+    assert client.closed is True
