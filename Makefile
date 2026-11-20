@@ -92,11 +92,9 @@ ci: ## Local equivalent of every CI job (Docker and ShellCheck required)
 	$(MAKE) audit
 
 screenshots: ## Capture dashboard screenshots and hero GIF
-	@test -f scripts/capture_screenshots.py || { echo "screenshots are implemented in T14"; exit 1; }
-	uv run python scripts/capture_screenshots.py
+	uv run --group ui python scripts/capture_screenshots.py
 
 bench: ## Produce docs/BENCHMARKS.md
-	@test -f scripts/bench.py || { echo "benchmarks are implemented in T14"; exit 1; }
 	uv run python scripts/bench.py
 
 clean: ## Remove local caches and build artifacts
