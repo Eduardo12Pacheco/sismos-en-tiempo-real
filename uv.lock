@@ -850,6 +850,7 @@ name = "realtime-seismic-stream"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "pydantic-settings" },
     { name = "structlog" },
     { name = "typer" },
@@ -870,6 +871,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<0.29" },
     { name = "pydantic-settings" },
     { name = "structlog" },
     { name = "typer" },
