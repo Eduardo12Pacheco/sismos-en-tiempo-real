@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
 class SourceError(Exception):
@@ -46,4 +46,85 @@ class EventSource(Protocol):
 
     def records(self) -> Iterator[SourceRecord]:
         """Yield records lazily."""
+        ...
+
+
+@runtime_checkable
+class Metrics(Protocol):
+    """Observability port mirroring the metric catalog in the metrics adapter.
+
+    Named methods keep the application layer free of metric-name strings and
+    make each use case testable with an in-memory fake.
+    """
+
+    def set_build_info(self, service: str, version: str) -> None:
+        """Expose the service name and version as build information."""
+        ...
+
+    def record_ingest(self, source: str, outcome: str) -> None:
+        """Count one ingest record by source and outcome (published/filtered/invalid)."""
+        ...
+
+    def record_backpressure_wait(self) -> None:
+        """Count one producer backpressure wait."""
+        ...
+
+    def observe_replay_schedule_lag(self, seconds: float) -> None:
+        """Record how late the replay schedule is running, in seconds."""
+        ...
+
+    def set_replay_progress(self, ratio: float) -> None:
+        """Set replay progress as a fraction in ``[0, 1]``."""
+        ...
+
+    def record_processor_event(self, outcome: str) -> None:
+        """Count one processed event by outcome (new/revision/duplicate)."""
+        ...
+
+    def record_processor_alert(self, level: str) -> None:
+        """Count one alert by level."""
+        ...
+
+    def record_window_update(self) -> None:
+        """Count one emitted window update."""
+        ...
+
+    def record_processor_skipped(self, reason: str) -> None:
+        """Count one skipped processor record (undecodable/processing_error)."""
+        ...
+
+    def record_sink_rows(self, table: str, count: int) -> None:
+        """Add ``count`` stored rows for ``table``."""
+        ...
+
+    def record_sink_batch(self, table: str, outcome: str) -> None:
+        """Count one sink batch by table and outcome (ok/retried/bisected)."""
+        ...
+
+    def observe_sink_insert_seconds(self, table: str, seconds: float) -> None:
+        """Record the duration of one ClickHouse insert for ``table``."""
+        ...
+
+    def record_sink_retry(self) -> None:
+        """Count one transient sink retry."""
+        ...
+
+    def set_sink_paused(self, paused: bool) -> None:
+        """Set the sink pause gauge (1 while the consumer assignment is paused)."""
+        ...
+
+    def observe_end_to_end_seconds(self, seconds: float) -> None:
+        """Record stored-minus-ingested latency for one event."""
+        ...
+
+    def record_dlq_message(self, stage: str, error_type: str) -> None:
+        """Count one dead-letter message by stage and error type."""
+        ...
+
+    def set_consumer_lag(self, group: str, topic: str, lag: int) -> None:
+        """Set the consumer lag in messages for ``group``/``topic``."""
+        ...
+
+    def set_topic_end_offset(self, topic: str, offset: int) -> None:
+        """Set the end offset for ``topic``."""
         ...
