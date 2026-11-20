@@ -71,7 +71,7 @@ ignore = ["ANN401", "PT011", "RUF012", "PLR0913", "PLR2004", "SIM117"]
 "scripts/**" = ["ANN", "T201"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["seismic_stream"]
+known-first-party = ["seismic_stream", "tests"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -90,6 +90,7 @@ files = ["src"]
 minversion = "8.0"
 addopts = "-ra --strict-markers --disable-socket --allow-hosts=127.0.0.1,::1"
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
   "unit: fast tests that need no Docker",
   "integration: tests that need a running Docker Compose subset",
