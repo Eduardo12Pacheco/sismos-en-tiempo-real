@@ -73,15 +73,19 @@ class FakeStore:
         failures: int = 0,
         poison_ids: set[str] | None = None,
         transient_attempts: set[int] | None = None,
+        on_attempt: Any = None,
     ) -> None:
         self.failures = failures
         self.poison_ids = poison_ids or set()
         self.transient_attempts = transient_attempts or set()
+        self.on_attempt = on_attempt
         self.writes: list[Write] = []
         self.attempts = 0
 
     def _write(self, table: str, rows: Sequence[Any], token: str) -> None:
         self.attempts += 1
+        if self.on_attempt is not None:
+            self.on_attempt(self.attempts)
         if self.attempts in self.transient_attempts or self.failures > 0:
             self.failures = max(0, self.failures - 1)
             raise TransientStoreError("connection refused")
@@ -170,6 +174,14 @@ def _record(
     )
 
 
+class FixedRandom:
+    def __init__(self, value: float) -> None:
+        self._value = value
+
+    def uniform(self, low: float, high: float) -> float:
+        return min(max(self._value, low), high)
+
+
 def _service(  # noqa: PLR0917 - test helper mirrors service collaborators
     consumer: FakeConsumer,
     store: FakeStore,
@@ -179,6 +191,8 @@ def _service(  # noqa: PLR0917 - test helper mirrors service collaborators
     codecs: Mapping[str, FakeCodec],
     *,
     retry_base: float = 1.0,
+    retry_max: float = 30.0,
+    rng: Any = None,
 ) -> SinkService:
     return SinkService(
         consumer=consumer,
@@ -186,11 +200,11 @@ def _service(  # noqa: PLR0917 - test helper mirrors service collaborators
         dead_letters=letters,
         metrics=metrics,
         clock=clock,
-        retry_policy=RetryPolicy(base_seconds=retry_base, max_seconds=30.0),
+        retry_policy=RetryPolicy(base_seconds=retry_base, max_seconds=retry_max),
         codecs=codecs,
         batch_size=500,
         batch_max_wait_seconds=0.0,
-        rng=random.Random(0),
+        rng=rng or random.Random(0),
     )
 
 
@@ -313,6 +327,37 @@ def test_undecodable_record_goes_to_sink_decode_with_raw_payload() -> None:
     assert metrics.dlq == [("sink_decode", "ValueError")]
     assert letters.flushes == 1
     assert consumer.commits == [{("seismic.events.v1", 0): 4}]
+
+
+def test_readiness_turns_unready_after_thirty_seconds_of_transient_failure() -> None:
+    event = make_event()
+    consumer = FakeConsumer([[_record(0, b"e1")]])
+    store = FakeStore(transient_attempts={1})
+    clock = FakeClock()
+    service: SinkService
+    snapshots: list[tuple[bool, str | None]] = []
+
+    def observe(attempt: int) -> None:
+        if attempt == 2:
+            snapshots.append(service.readiness())
+
+    store.on_attempt = observe
+    service = _service(
+        consumer,
+        store,
+        FakeDeadLetters(),
+        FakeMetrics(),
+        clock,
+        {"seismic.events.v1": FakeCodec({b"e1": event})},
+        retry_base=30.0,
+        retry_max=30.0,
+        rng=FixedRandom(30.0),
+    )
+
+    service.run(max_batches=1)
+
+    assert snapshots == [(False, "store unavailable for 30s")]
+    assert service.readiness() == (True, None)
 
 
 def test_events_use_ingest_header_for_end_to_end_latency() -> None:

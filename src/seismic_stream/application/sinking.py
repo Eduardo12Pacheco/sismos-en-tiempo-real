@@ -43,6 +43,9 @@ TABLE_WINDOW_STATS = "window_stats"
 TABLE_ALERTS = "alerts"
 TABLE_DEAD_LETTERS = "dead_letters"
 
+#: Continuous transient-failure time after which the sink reports unready (D10).
+UNREADY_AFTER_SECONDS = 30.0
+
 _TOPIC_TABLES: Mapping[str, str] = {
     "seismic.events.v1": TABLE_EVENTS,
     "seismic.aggregates.v1": TABLE_WINDOW_STATS,
@@ -162,6 +165,16 @@ class SinkService:
         self._batches = 0
         self._rows = 0
         self._dead_letter_count = 0
+        self._failure_started: float | None = None
+
+    def readiness(self) -> tuple[bool, str | None]:
+        """Report unready after continuous transient failures for 30 seconds (D10)."""
+        if self._failure_started is None:
+            return True, None
+        elapsed = self._clock.now() - self._failure_started
+        if elapsed < UNREADY_AFTER_SECONDS:
+            return True, None
+        return False, f"store unavailable for {elapsed:.0f}s"
 
     def run(
         self,
@@ -242,6 +255,7 @@ class SinkService:
                         self._consumer.pause()
                         self._metrics.set_sink_paused(True)
                         paused = True
+                        self._failure_started = self._clock.now()
                     self._metrics.record_sink_retry()
                     self._clock.sleep(self._retry_policy.delay(attempt, self._rng))
                     attempt += 1
@@ -263,6 +277,7 @@ class SinkService:
             if paused:
                 self._consumer.resume()
                 self._metrics.set_sink_paused(False)
+                self._failure_started = None
         return "retried" if retried else "ok"
 
     def _write_chunk(self, table: str, rows: Sequence[_Row], token: str) -> None:

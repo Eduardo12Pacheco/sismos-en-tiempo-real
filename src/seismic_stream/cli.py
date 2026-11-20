@@ -274,7 +274,7 @@ def sink(
             server = ObservabilityServer(
                 _service_metrics_port(settings, "sink"),
                 session.metrics.registry,
-                lambda: Readiness(ready=True),
+                lambda: _sink_readiness(session),
             )
             server.start()
             summary = session.service.run(
@@ -291,6 +291,12 @@ def sink(
             session.shutdown()
 
     typer.echo(json.dumps(summary.as_dict(), sort_keys=True))
+
+
+def _sink_readiness(session: SinkSession) -> Readiness:
+    """Expose the sink's continuous-failure readiness (D10)."""
+    ready, reason = session.service.readiness()
+    return Readiness(ready=ready, reasons=(reason,) if reason else ())
 
 
 def _service_metrics_port(settings: Settings, service: str) -> int:
