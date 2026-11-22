@@ -205,6 +205,13 @@ def test_readme_results_table_is_backed_by_benchmarks() -> None:
     assert not missing, f"README numbers absent from docs/BENCHMARKS.md: {missing}"
 
 
+def test_readme_limitation_names_event_time_windows() -> None:
+    """The limitation bullet names event-time windows, not the operating system (S3)."""
+    text = README_EN.read_text(encoding="utf-8")
+    assert "Windows are provisional" not in text
+    assert "Event-time windows are provisional" in text
+
+
 def test_readme_links_the_real_assets() -> None:
     """The hero and screenshot assets referenced by the README exist (S26)."""
     text = README_EN.read_text(encoding="utf-8")

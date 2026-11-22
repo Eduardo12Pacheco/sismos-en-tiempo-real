@@ -135,7 +135,7 @@ in the `User-Agent`, backs off on rate limits and only emits unseen `(id, update
 
 - Single Redpanda node, one partition per topic, no replication, authentication or TLS.
 - Windows and macOS need Docker Desktop; the stack is not natively installable there.
-- Windows are provisional: late revisions are not re-counted in already emitted aggregates.
+- Event-time windows are provisional: late revisions are not re-counted in already emitted aggregates.
 - Processor dedup state is unbounded; the design targets a one-week replay, not a 24/7 feed.
 - "Ecuador region" is an inclusive bounding box (including Galápagos), not a tectonic boundary.
 - IGEPN was evaluated but not integrated: its only machine-readable endpoint is undocumented,
