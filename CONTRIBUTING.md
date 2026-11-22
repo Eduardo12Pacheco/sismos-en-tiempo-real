@@ -1,110 +1,91 @@
-# Contributing
+# Contribuir
 
-Thanks for taking a look at `sismos-en-tiempo-real`. This guide covers the local
-workflow, the quality gates and the conventions used in this repository.
+Gracias por revisar `sismos-en-tiempo-real`. Esta guía cubre el flujo de trabajo local, los controles de calidad y las convenciones usadas en este repositorio.
 
-## Requirements
+## Requisitos
 
-- Python 3.12 (managed through [uv](https://docs.astral.sh/uv/); see `.python-version`)
-- Docker with Compose v2 for the integration and end-to-end suites
-- `make` is a convenience on Linux and macOS; Windows users run the underlying `uv`
-  commands directly
+- Python 3.12 (gestionado con [uv](https://docs.astral.sh/uv/); ver `.python-version`)
+- Docker con Compose v2 para las suites de integración y end-to-end
+- `make` es una comodidad en Linux y macOS; los usuarios de Windows ejecutan directamente los comandos de `uv` subyacentes
 
-## Setup
+## Preparación del entorno
 
 ```bash
 uv sync --frozen
 uv run seismic-stream --version
 ```
 
-## Commands
+## Comandos
 
-| Command | Purpose |
+| Comando | Propósito |
 |---|---|
-| `make lint` | Ruff lint plus formatting check |
-| `make fmt` | Apply Ruff fixes and formatting |
+| `make lint` | Lint de Ruff más verificación de formato |
+| `make fmt` | Aplica las correcciones y el formato de Ruff |
 | `make types` | `mypy --strict src` |
-| `make arch` | Import-linter hexagonal contracts |
-| `make test` | Unit, property and architecture tests (no Docker) |
-| `make test-int` | Integration tests (Docker required) |
-| `make test-e2e` | End-to-end tests (full stack) |
-| `make test-ui` | Playwright dashboard tests (full stack) |
-| `make cov` | Every test with the 85% coverage gate |
-| `make check` | Installer prerequisite checks (`./install.sh --check`) |
-| `make install` | Build the stack and start the replay |
-| `make down` | Stop the stack and keep its volumes |
-| `make shellcheck` | Lint `install.sh` |
-| `make compose-config` | Validate every Compose override combination |
-| `make actionlint` | Lint the GitHub Actions workflows |
-| `make audit` | `pip-audit` dependency audit |
-| `make ci` | Local equivalent of every CI job (Docker required) |
+| `make arch` | Contratos hexagonales de import-linter |
+| `make test` | Tests unitarios, de propiedades y de arquitectura (sin Docker) |
+| `make test-int` | Tests de integración (requiere Docker) |
+| `make test-e2e` | Tests end-to-end (stack completo) |
+| `make test-ui` | Tests del dashboard con Playwright (stack completo) |
+| `make cov` | Todos los tests con el umbral de cobertura del 85% |
+| `make check` | Verificaciones de requisitos del instalador (`./install.sh --check`) |
+| `make install` | Construye el stack e inicia el replay |
+| `make down` | Detiene el stack y conserva sus volúmenes |
+| `make shellcheck` | Lint de `install.sh` |
+| `make compose-config` | Valida cada combinación de overrides de Compose |
+| `make actionlint` | Lint de los workflows de GitHub Actions |
+| `make audit` | Auditoría de dependencias con `pip-audit` |
+| `make ci` | Equivalente local de cada job de CI (requiere Docker) |
 
-Tests never reach the network: `pytest-socket` blocks every host except
-`127.0.0.1`/`::1`. Tests that need a service bind ephemeral ports (port `0`).
+Los tests nunca salen a la red: `pytest-socket` bloquea todos los hosts excepto `127.0.0.1`/`::1`. Los tests que necesitan un servicio se enlazan a puertos efímeros (puerto `0`).
 
-## Documentation
+## Documentación
 
-Documentation is part of the definition of done and is drift-tested by
-`tests/unit/test_docs.py`:
+La documentación forma parte de la definición de terminado y tiene pruebas de deriva en `tests/unit/test_docs.py`:
 
-| File | Audience and content |
+| Archivo | Audiencia y contenido |
 |---|---|
-| `README.md`, `README.en.md` | Public pitch, quickstart, limitations; `README.md` (Spanish, primary) and `README.en.md` (English) each stay at 150 lines or fewer |
-| `docs/ARCHITECTURE.md` | Layers, the D28 patterns with their implementing module, data flow, schemas, delivery semantics and scaling path |
-| `docs/DATA.md` | Sample provenance, query, checksum, re-recording, licence and credit |
-| `docs/OPERATIONS.md` | Prerequisites, commands, every environment variable, metrics, ports and troubleshooting |
-| `docs/adr/` | Numbered decisions with status, date and alternatives |
+| `README.md`, `README.en.md` | Presentación pública, inicio rápido y limitaciones; `README.md` (español, principal) y `README.en.md` (inglés) mantienen cada uno 150 líneas o menos |
+| `docs/ARCHITECTURE.md` | Capas, patrones D28 con su módulo de implementación, flujo de datos, esquemas, semántica de entrega y ruta de escalado |
+| `docs/DATA.md` | Procedencia de la muestra, consulta, checksum, regrabación, licencia y crédito |
+| `docs/OPERATIONS.md` | Requisitos previos, comandos, cada variable de entorno, métricas, puertos y resolución de problemas |
+| `docs/adr/` | Decisiones numeradas con estado, fecha y alternativas |
 
-When you change behaviour:
+Cuando cambies el comportamiento:
 
-- a new or changed `Settings` field must appear in `.env.example` and in the
-  `docs/OPERATIONS.md` configuration table, named `SEISMIC_<FIELD>`;
-- a new or changed `METRIC_CATALOG` entry must appear in the
-  `docs/OPERATIONS.md` metric table;
-- every ADR keeps the `Status`, `Date`, `Context`, `Decision`, `Consequences` and
-  `Alternatives considered` sections;
-- relative links must resolve, Mermaid blocks must start with a known diagram
-  keyword and keep balanced delimiters, and no `TODO`/`TBD`/`FIXME`/`lorem`
-  placeholder may survive;
-- benchmark numbers belong only in the generated `docs/BENCHMARKS.md`.
+- un campo `Settings` nuevo o modificado debe aparecer en `.env.example` y en la tabla de configuración de `docs/OPERATIONS.md`, con el nombre `SEISMIC_<FIELD>`;
+- una entrada nueva o modificada de `METRIC_CATALOG` debe aparecer en la tabla de métricas de `docs/OPERATIONS.md`;
+- cada ADR conserva las secciones `Estado`, `Fecha`, `Contexto`, `Decisión`, `Consecuencias` y `Alternativas consideradas`;
+- los enlaces relativos deben resolver, los bloques Mermaid deben empezar con una palabra clave de diagrama conocida y mantener delimitadores balanceados, y no puede sobrevivir ningún marcador de posición `TODO`/`TBD`/`FIXME`/`lorem`;
+- los números de benchmark pertenecen solo al `docs/BENCHMARKS.md` generado.
 
-Run the checks with:
+Ejecuta las verificaciones con:
 
 ```bash
 uv run pytest tests/unit/test_docs.py -q
 ```
 
-## Commit convention
+## Convención de commits
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/):
-`feat:`, `fix:`, `test:`, `docs:`, `chore:`, `ci:`, `build:`, `refactor:`. Keep each
-commit a coherent, reviewable unit (roughly 400 changed lines or fewer) and keep tests
-and docs in the same commit as the behaviour they describe. No AI attribution lines.
+Los commits siguen [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `test:`, `docs:`, `chore:`, `ci:`, `build:`, `refactor:`. Mantén cada commit como una unidad coherente y revisable (alrededor de 400 líneas cambiadas o menos) y deja los tests y la documentación en el mismo commit que el comportamiento que describen. No incluyas líneas de atribución de IA.
 
-## Architecture rules
+## Reglas de arquitectura
 
-The codebase is hexagonal: `domain` has no I/O and no third-party imports,
-`application` depends only on `domain`, and `adapters` depend on both. The
-`cli`/`composition` layer wires everything together. These rules are enforced by
-`import-linter` and by `tests/architecture/test_import_contracts.py`; never weaken a
-contract to make a change pass.
+El código es hexagonal: `domain` no tiene I/O ni imports de terceros, `application` depende solo de `domain`, y `adapters` depende de ambos. La capa `cli`/`composition` conecta todo. Estas reglas las aplican `import-linter` y `tests/architecture/test_import_contracts.py`; nunca debilites un contrato para que un cambio pase.
 
-## Type checking overrides
+## Excepciones de verificación de tipos
 
-`mypy --strict` runs over `src/`. Any module-level `ignore_missing_imports` override
-must be listed here with the reason.
+`mypy --strict` se ejecuta sobre `src/`. Cualquier override a nivel de módulo de `ignore_missing_imports` debe listarse aquí con su motivo.
 
-| Module | Reason |
+| Módulo | Motivo |
 |---|---|
-| `confluent_kafka` (and submodules) | Ships no PEP 561 marker or stubs; typed wrappers live in `adapters/kafka`. |
-| `authlib` (and submodules) | Transitive confluent-kafka extra with no stubs; only its warning class is imported to silence third-party noise. |
+| `confluent_kafka` (y submódulos) | No incluye marcador PEP 561 ni stubs; los wrappers tipados viven en `adapters/kafka`. |
+| `authlib` (y submódulos) | Extra transitivo de confluent-kafka sin stubs; solo se importa su clase de advertencia para silenciar ruido de terceros. |
 
 ## Tests
 
-Write the failing test first, then the implementation. Do not skip, delete or weaken
-tests to obtain a green run. Property-based tests use Hypothesis profiles: `dev` is the
-default and `ci` (`HYPOTHESIS_PROFILE=ci`) fixes `max_examples=100` and derandomizes.
+Escribe primero el test que falla y luego la implementación. No omitas, borres ni debilites tests para obtener una ejecución en verde. Los tests basados en propiedades usan perfiles de Hypothesis: `dev` es el predeterminado y `ci` (`HYPOTHESIS_PROFILE=ci`) fija `max_examples=100` y elimina la aleatoriedad (derandomize).
 
-## License
+## Licencia
 
-By contributing you agree that your contribution is licensed under the MIT License.
+Al contribuir, aceptas que tu contribución se licencia bajo la Licencia MIT.
