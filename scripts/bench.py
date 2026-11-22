@@ -133,9 +133,20 @@ def median(values: Sequence[float]) -> float:
 
 
 def median_run(runs: Sequence[BenchRun]) -> BenchRun:
-    """Return the run whose wall time is the median of the series."""
-    ordered = sorted(runs, key=lambda run: run.wall_seconds)
-    return ordered[len(ordered) // 2]
+    """Return one summary row whose every metric is the median of that metric across runs."""
+    return BenchRun(
+        wall_seconds=median([run.wall_seconds for run in runs]),
+        events=round(median([float(run.events) for run in runs])),
+        events_per_second=median([run.events_per_second for run in runs]),
+        p50_ms=_median_or_none([run.p50_ms for run in runs]),
+        p95_ms=_median_or_none([run.p95_ms for run in runs]),
+    )
+
+
+def _median_or_none(values: Sequence[float | None]) -> float | None:
+    """Median of the values, or None when any run did not measure the latency."""
+    present = [value for value in values if value is not None]
+    return median(present) if len(present) == len(values) else None
 
 
 def prometheus_query(expression: str) -> list[dict[str, Any]]:
@@ -293,7 +304,7 @@ def render_report(
 ) -> str:
     """Render the committed benchmark report from measured values."""
     columns = " | ".join(f"Run {index}" for index in range(1, len(runs) + 1))
-    separator = " | ".join("---" for _ in range(len(runs) + 2))
+    separator = " | ".join("---" for _ in range(len(runs) + 1))
 
     def row(label: str, values: Sequence[str], median_value: str) -> str:
         return f"| {label} | {' | '.join(values)} | {median_value} |"

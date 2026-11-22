@@ -24,12 +24,12 @@ wall time. Latency is the sink's ingest-to-storage histogram through the
 Prometheus API (milliseconds).
 
 | Metric | Run 1 | Run 2 | Run 3 | Median |
-| --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- |
 | Wall time (s) | 6.7 | 6.1 | 16.6 | 6.7 |
 | Stored earthquakes | 1739 | 1739 | 1739 | 1739 |
 | Throughput (events/s) | 259.7 | 283.2 | 104.9 | 259.7 |
 | End-to-end p50 (ms) | 230.4 | 375.0 | 230.4 | 230.4 |
-| End-to-end p95 (ms) | 470.6 | 487.5 | 677.5 | 470.6 |
+| End-to-end p95 (ms) | 470.6 | 487.5 | 677.5 | 487.5 |
 
 ## Reproduce
 

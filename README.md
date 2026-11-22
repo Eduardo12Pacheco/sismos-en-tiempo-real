@@ -94,7 +94,7 @@ Measured on this machine with `make bench` (three clean runs, median; see
 | Stored earthquakes | 1739 |
 | Wall time | 6.7 s |
 | Throughput | 259.7 events/s |
-| End-to-end latency | p50 230.4 ms / p95 470.6 ms |
+| End-to-end latency | p50 230.4 ms / p95 487.5 ms |
 | Machine | Intel i5-12400T, 31.1 GiB RAM |
 | Measured on | 2026-11-20 |
 

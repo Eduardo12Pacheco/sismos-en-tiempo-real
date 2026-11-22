@@ -105,3 +105,89 @@ def test_median_run_returns_the_middle_wall_time() -> None:
     ]
 
     assert bench.median_run(runs).wall_seconds == 20.0
+
+
+MACHINE = {
+    "cpu": "Test CPU 8-core",
+    "ram": "31.0 GiB",
+    "os": "Test Linux 6.0",
+    "docker": "27.0.0",
+    "python": "3.12.0",
+    "date": "2026-11-20T12:00:00Z",
+}
+
+
+def _cells(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def test_median_run_takes_the_median_of_every_metric_across_runs() -> None:
+    """The published p95 is the median of the three p95 values, not the run at median wall time."""
+    runs = [
+        bench.BenchRun(
+            wall_seconds=6.7, events=1739, events_per_second=259.7, p50_ms=230.4, p95_ms=470.6
+        ),
+        bench.BenchRun(
+            wall_seconds=6.1, events=1739, events_per_second=283.2, p50_ms=375.0, p95_ms=487.5
+        ),
+        bench.BenchRun(
+            wall_seconds=16.6, events=1739, events_per_second=104.9, p50_ms=230.4, p95_ms=677.5
+        ),
+    ]
+
+    summary = bench.median_run(runs)
+
+    assert summary.p95_ms == 487.5
+    assert summary.p50_ms == 230.4
+    assert summary.events_per_second == 259.7
+    assert summary.wall_seconds == 6.7
+
+
+def test_median_run_reports_no_latency_when_a_run_has_none() -> None:
+    runs = [
+        bench.BenchRun(wall_seconds=1.0, events=1, events_per_second=1.0, p50_ms=None, p95_ms=None),
+        bench.BenchRun(wall_seconds=2.0, events=1, events_per_second=1.0, p50_ms=5.0, p95_ms=6.0),
+    ]
+
+    summary = bench.median_run(runs)
+
+    assert summary.p50_ms is None
+    assert summary.p95_ms is None
+
+
+@pytest.mark.parametrize("run_count", [1, 3])
+def test_render_report_table_header_and_delimiter_have_the_same_cell_count(run_count: int) -> None:
+    """GFM renders a table only when the delimiter has one cell per header cell (S2)."""
+    runs = [
+        bench.BenchRun(
+            wall_seconds=10.0 + index,
+            events=1000,
+            events_per_second=100.0,
+            p50_ms=10.0,
+            p95_ms=20.0,
+        )
+        for index in range(run_count)
+    ]
+
+    report = bench.render_report(MACHINE, runs, bench.median_run(runs))
+
+    lines = report.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("| Metric |"))
+    assert len(_cells(lines[start + 1])) == len(_cells(lines[start]))
+
+
+def test_committed_report_median_column_is_the_median_of_its_runs() -> None:
+    """Each published median is computed from its run cells, not copied from one run (S1, S2)."""
+    lines = bench.DEFAULT_OUTPUT.read_text(encoding="utf-8").splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith("| Metric |"))
+    header = _cells(lines[start])
+    assert len(_cells(lines[start + 1])) == len(header)
+    rows = []
+    for line in lines[start + 2 :]:
+        if not line.startswith("|"):
+            break
+        rows.append(_cells(line))
+    assert rows
+    for cells in rows:
+        runs = [float(cell) for cell in cells[1:-1]]
+        assert float(cells[-1]) == pytest.approx(bench.median(runs), abs=0.05), cells[0]

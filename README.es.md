@@ -95,7 +95,7 @@ comandos exactos están en [docs/BENCHMARKS.md](docs/BENCHMARKS.md)).
 | Terremotos almacenados | 1739 |
 | Tiempo de pared | 6.7 s |
 | Throughput | 259.7 events/s |
-| Latencia extremo a extremo | p50 230.4 ms / p95 470.6 ms |
+| Latencia extremo a extremo | p50 230.4 ms / p95 487.5 ms |
 | Máquina | Intel i5-12400T, 31.1 GiB RAM |
 | Medido el | 2026-11-20 |
 
