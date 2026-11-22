@@ -1,26 +1,22 @@
-# Security Policy
+# Política de seguridad
 
-## Supported versions
+## Versiones con soporte
 
-Only the latest `0.1.x` release line is supported with security fixes.
+Solo la línea de releases `0.1.x` más reciente recibe correcciones de seguridad.
 
-## Reporting a vulnerability
+## Reporte de vulnerabilidades
 
-Please do not open a public issue for a suspected vulnerability. Report it privately
-through GitHub's ["Report a vulnerability"](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities)
-feature on this repository, including:
+Por favor, no abras un issue público por una vulnerabilidad sospechada. Repórtala de forma privada mediante la función de GitHub para reportar vulnerabilidades ([Report a vulnerability](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities)) en este repositorio, e incluye:
 
-- the affected version or commit,
-- a minimal reproduction,
-- the impact you believe it has.
+- la versión o commit afectado,
+- una reproducción mínima,
+- el impacto que consideras que tiene.
 
-You will receive an acknowledgement as soon as possible. This is a local-first,
-single-user portfolio project without authentication or TLS, so the expected impact of
-most findings is limited to the local machine and its data volumes.
+Recibirás un acuse de recibo lo antes posible. Este es un proyecto de portafolio local-first de un solo usuario, sin autenticación ni TLS, así que el impacto esperado de la mayoría de los hallazgos se limita a la máquina local y a sus volúmenes de datos.
 
-## Scope
+## Alcance
 
-- Secrets are never committed; the history is scanned with gitleaks.
-- Dependencies are audited in CI with `pip-audit`.
-- The default stack binds published ports to `127.0.0.1` only.
-- Development passwords in `.env.example` are local defaults, not secrets.
+- Nunca se suben secretos al repositorio; el historial se analiza con gitleaks.
+- Las dependencias se auditan en CI con `pip-audit`.
+- El stack por defecto publica los puertos solo en `127.0.0.1`.
+- Las contraseñas de desarrollo en `.env.example` son valores por defecto locales, no secretos.
