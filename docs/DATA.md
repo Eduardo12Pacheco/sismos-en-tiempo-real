@@ -1,104 +1,81 @@
-# Data sources and lineage
+# Fuentes de datos y linaje
 
-This document records where the data in `data/samples/` comes from, how it is
-licensed, how the checksum is verified, and which sources were evaluated but
-not integrated. The runtime flow that consumes this data is described in
-[ARCHITECTURE.md](ARCHITECTURE.md); the commands are in
-[OPERATIONS.md](OPERATIONS.md).
+Este documento registra de dónde proviene el dato de `data/samples/`, cómo está licenciado, cómo se verifica el checksum y qué fuentes se evaluaron pero no se integraron. El flujo de ejecución que consume estos datos está descrito en [ARCHITECTURE.md](ARCHITECTURE.md); los comandos están en [OPERATIONS.md](OPERATIONS.md).
 
-## Bundled sample
+## Muestra incluida
 
-| Field | Value |
+| Campo | Valor |
 |---|---|
-| File | `data/samples/usgs_2026-11-02_2026-11-09_m1.geojson` |
-| Source | USGS FDSN Event Web Service (`https://earthquake.usgs.gov/fdsnws/event/1/query`) |
-| Query | `format=geojson&starttime=2026-11-02T00:00:00&endtime=2026-11-09T00:00:00&minmagnitude=1.0&orderby=time-asc` |
-| Retrieved | 2026-11-19 (UTC) |
-| Format | GeoJSON `FeatureCollection`, USGS API `2.8.4` |
+| Archivo | `data/samples/usgs_2026-11-02_2026-11-09_m1.geojson` |
+| Fuente | USGS FDSN Event Web Service (`https://earthquake.usgs.gov/fdsnws/event/1/query`) |
+| Consulta | `format=geojson&starttime=2026-11-02T00:00:00&endtime=2026-11-09T00:00:00&minmagnitude=1.0&orderby=time-asc` |
+| Descargada | 2026-11-19 (UTC) |
+| Formato | `FeatureCollection` de GeoJSON, API de USGS `2.8.4` |
 | sha256 | `4e2449956e130c2bfdc997bf6b9d084f20767ec7f04cf01b041b3d4263f41f3e` |
-| Size | 1,300,880 bytes |
-| Licence | U.S. Public Domain (see below) |
-| Credit | Credit: U.S. Geological Survey |
+| Tamaño | 1.300.880 bytes |
+| Licencia | Dominio público de EE. UU. (ver abajo) |
+| Crédito | Credit: U.S. Geological Survey |
 
-The response is stored verbatim: the repository does not rewrite, filter or
-re-serialize the sample. `data/samples/SHA256SUMS` pins the exact bytes and is
-checked with:
+La respuesta se guarda tal cual: el repositorio no reescribe, filtra ni vuelve a serializar la muestra. `data/samples/SHA256SUMS` fija los bytes exactos y se verifica con:
 
 ```bash
 (cd data/samples && sha256sum -c SHA256SUMS)
 ```
 
-`*.geojson -text` in `.gitattributes` stops Git from converting line endings, so
-a fresh checkout on Windows keeps the same checksum as Linux and macOS.
+La regla `*.geojson -text` en `.gitattributes` evita que Git convierta los finales de línea, así que un checkout nuevo en Windows conserva el mismo checksum que en Linux y macOS.
 
-### Reproducing the download
+### Reproducir la descarga
 
-`scripts/record_sample.py` contains the pinned URL and query parameters and
-uses only the Python standard library:
+`scripts/record_sample.py` contiene la URL fijada y los parámetros de consulta, y usa solo la biblioteca estándar de Python:
 
 ```bash
-python scripts/record_sample.py                       # download + write SHA256SUMS
-python scripts/record_sample.py --verify              # offline checksum check
+python scripts/record_sample.py                       # descarga + escribe SHA256SUMS
+python scripts/record_sample.py --verify              # verificación de checksum offline
 ```
 
-USGS revises events over time (magnitudes and locations are updated, events can
-be added or removed), so a re-recorded file may not be byte-identical to the
-committed one. A new recording is still valid: replace the file, run the script
-(or `sha256sum`) to refresh `SHA256SUMS`, and update the checksum above. Tests
-compute counts from the file and read the manifest instead of hard-coding the
-recording date's numbers.
+USGS revisa los eventos con el tiempo (se actualizan magnitudes y ubicaciones, y se pueden agregar o eliminar eventos), así que un archivo regrabado puede no ser idéntico byte a byte al confirmado. Una nueva grabación sigue siendo válida: reemplaza el archivo, ejecuta el script (o `sha256sum`) para actualizar `SHA256SUMS` y actualiza el checksum de arriba. Los tests calculan los conteos a partir del archivo y leen el manifiesto en lugar de codificar los números de la fecha de grabación.
 
-## Licence and credit
+## Licencia y crédito
 
-USGS copyright policy states: "USGS-authored or produced data and information
-are considered to be in the U.S. Public Domain." Redistribution of the recorded
-sample is therefore allowed. USGS asks for proper credit, so every surface that
-exposes the data carries the line:
+La política de derechos de autor de USGS establece que los datos e información producidos por USGS se consideran de dominio público de los EE. UU. ("USGS-authored or produced data and information are considered to be in the U.S. Public Domain."). Por lo tanto, se permite redistribuir la muestra grabada. USGS pide que se dé el crédito correspondiente, así que cada superficie que expone los datos incluye esta línea:
 
 ```text
 Credit: U.S. Geological Survey
 ```
 
-## Lineage
+## Linaje
 
 ```mermaid
 flowchart LR
-  Q[USGS FDSN query recorded 2026-11-19] --> F[data/samples geojson plus SHA256SUMS]
-  F --> R[ReplaySource sorted by time then id]
-  R --> S[SourceRecord with feature and event_time_ms]
-  S --> N[feature_to_event anti-corruption layer]
+  Q[Consulta FDSN de USGS grabada el 2026-11-19] --> F[data/samples geojson más SHA256SUMS]
+  F --> R[ReplaySource ordenado por tiempo y luego por id]
+  R --> S[SourceRecord con feature y event_time_ms]
+  S --> N[feature_to_event capa anticorrupción]
   N --> A[Avro earthquake_event v1]
   A --> K[(Redpanda seismic.events.v1)]
-  K --> P[processor windows and alerts]
+  K --> P[processor: ventanas y alertas]
   K --> C[(ClickHouse ReplacingMergeTree)]
   P --> C
-  C --> G[Grafana dashboards]
+  C --> G[dashboards de Grafana]
 ```
 
-The domain `Event` is immutable and versioned by `updated_at_ms`: the processor
-drops exact duplicates, treats a strictly newer timestamp as a revision, and the
-sink keeps the newest version in the `events_latest` view. The full contract is
-in [ARCHITECTURE.md](ARCHITECTURE.md#topics-and-schemas) and
-[ADR 0007](adr/0007-replay-event-time-and-data-clock.md).
+El `Event` del dominio es inmutable y se versiona por `updated_at_ms`: el processor descarta duplicados exactos, trata un timestamp estrictamente más nuevo como una revisión, y el sink conserva la versión más reciente en la vista `events_latest`. El contrato completo está en [ARCHITECTURE.md](ARCHITECTURE.md#topics-y-esquemas) y en la [ADR 0007](adr/0007-replay-event-time-and-data-clock.md).
 
-The optional live mode polls the documented USGS real-time GeoJSON summary
-feeds; it is never used by tests or by the default offline replay.
+El modo en vivo opcional consulta los feeds resumen GeoJSON en tiempo real documentados por USGS; nunca lo usan los tests ni el replay offline por defecto.
 
-## Evaluated but not integrated
+## Evaluadas pero no integradas
 
-| Source | Evidence | Why it is not used |
+| Fuente | Evidencia | Por qué no se usa |
 |---|---|---|
-| IGEPN Ecuador `https://www.igepn.edu.ec/portal/eventos/www/events.xml` | HTTP 200 `text/xml`, 5,044 bytes; `last-modified: Mon, 31 Aug 2026 15:01:26 GMT` (80 days stale when checked on 2026-11-19) | Undocumented format, no FDSN/QuakeML endpoint found and no terms or licence stated. The repository only documents the evaluation; it does not redistribute IGEPN data. |
+| IGEPN Ecuador `https://www.igepn.edu.ec/portal/eventos/www/events.xml` | HTTP 200 `text/xml`, 5.044 bytes; `last-modified: Mon, 31 Aug 2026 15:01:26 GMT` (80 días desactualizado al momento de la verificación, 2026-11-19) | Formato no documentado, no se encontró endpoint FDSN/QuakeML y no se declaran términos ni licencia. El repositorio solo documenta la evaluación; no redistribuye datos de IGEPN. |
 
-## Recorded profile (reference only)
+## Perfil de la grabación (solo referencia)
 
-The committed recording contains 1,817 features: 1,739 earthquakes, 36 quarry
-blasts, 22 ice quakes, 19 explosions and 1 "other event". These figures are
-informational; `replay-info` and the tests derive them from the file.
+La grabación confirmada contiene 1.817 features: 1.739 terremotos, 36 voladuras de cantera, 22 sismos de hielo, 19 explosiones y 1 "otro evento". Estas cifras son informativas; `replay-info` y los tests las derivan del archivo.
 
-## Related documents
+## Documentos relacionados
 
-- [Architecture](ARCHITECTURE.md)
-- [Operations](OPERATIONS.md)
-- [ADR 0005: effectively-once delivery](adr/0005-delivery-semantics-effectively-once.md)
-- [ADR 0007: replay, event time and the data clock](adr/0007-replay-event-time-and-data-clock.md)
+- [Arquitectura](ARCHITECTURE.md)
+- [Operación](OPERATIONS.md)
+- [ADR 0005: entrega effectively-once](adr/0005-delivery-semantics-effectively-once.md)
+- [ADR 0007: replay, tiempo de evento y reloj de datos](adr/0007-replay-event-time-and-data-clock.md)
