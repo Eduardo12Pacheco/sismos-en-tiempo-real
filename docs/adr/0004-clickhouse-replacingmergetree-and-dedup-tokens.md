@@ -1,79 +1,37 @@
-# ADR 0004: ClickHouse ReplacingMergeTree with insert deduplication tokens
+# ADR 0004: ClickHouse ReplacingMergeTree con tokens de deduplicación de inserts
 
-- **Status:** Accepted
-- **Date:** 2026-11-20
-- **Related:** [Architecture](../ARCHITECTURE.md) · [ADR 0005](0005-delivery-semantics-effectively-once.md) · [ADR 0006](0006-dead-letter-channel-and-backpressure.md)
+- **Estado:** Aceptada
+- **Fecha:** 2026-11-20
+- **Relacionados:** [Arquitectura](../ARCHITECTURE.md) · [ADR 0005](0005-delivery-semantics-effectively-once.md) · [ADR 0006](0006-dead-letter-channel-and-backpressure.md)
 
-## Context
+## Contexto
 
-The sink stores four append-oriented streams: earthquake events, window
-aggregates, alerts and dead letters. Kafka delivery is at least once, replaying
-the bundled sample is a first-class demo action, and revisions of the same USGS
-event arrive with a newer `updated_at_ms`. The repository must therefore accept
-the same logical row more than once and still expose one current row per identity.
+El sink almacena cuatro flujos orientados a append: eventos sísmicos, agregados de ventanas, alertas y dead letters. La entrega de Kafka es al menos una vez, reproducir la muestra incluida es una acción de demo de primera clase, y las revisiones de un mismo evento de USGS llegan con un `updated_at_ms` más nuevo. Por lo tanto, el repositorio debe aceptar la misma fila lógica más de una vez y aun así exponer una fila actual por identidad.
 
-The storage must be local, columnar, shared by several containers, and queryable
-from Grafana while the stack runs. It must also work on Linux, macOS and Windows
-through Docker Desktop, without a cloud account.
+El almacenamiento debe ser local, columnar, compartido por varios contenedores y consultable desde Grafana mientras el stack corre. También debe funcionar en Linux, macOS y Windows mediante Docker Desktop, sin cuenta en la nube.
 
-## Decision
+## Decisión
 
-1. Use `clickhouse/clickhouse-server:26.8` (the LTS line) as the only database and
-   `clickhouse-connect` over HTTP 8123 from the sink. Rejected DuckDB (one writer,
-   no live shared service) and PostgreSQL (row store, weaker columnar scans).
-2. Store events and alerts in `ReplacingMergeTree(<version>)` tables keyed by
-   `event_id`, with `updated_at` as the version. Store dead letters keyed by
-   `dlq_id` with `failed_at` as the version. Store aggregates keyed by
-   `(region, window_start)` with `event_count` as the version, so the newest
-   aggregate update wins.
-3. Do **not** partition the tables. ClickHouse replaces rows only inside one
-   partition, and a revision can change `event_time`; a single partition keeps the
-   identity and version semantics correct for this data volume.
-4. Read current state only through `*_latest` views that use `FINAL`:
-   `events_latest`, `window_stats_latest`, `alerts_latest`,
-   `dead_letters_latest`. A `data_clock` view exposes the newest stored
-   `event_time`, the wall clock and their shift for the dashboards.
-5. Give every insert an explicit `insert_deduplication_token` of the form
-   `"<topic>:<partition>:<first_offset>-<last_offset>"` and set
-   `non_replicated_deduplication_window = 1000` on every table. A retried Kafka
-   batch therefore inserts zero extra raw rows, even before background merges.
-   Bisected sub-batches append `:<lo>-<hi>` row-index ranges so their writes stay
-   distinct from the parent attempt.
-6. Ship the schema as six bundled `.sql` files applied in order by
-   `ClickHouseMigrator`, recorded in `seismic.schema_migrations`. Every statement
-   is `IF NOT EXISTS`, so `bootstrap` is idempotent and a crash mid-migration can
-   be retried safely.
-7. Treat the raw table as an append log and the `*_latest` view as the logical
-   table. Replaying the same sample twice keeps `events_latest` stable while the
-   raw `events` row count may grow; this difference is reported, never asserted
-   to be zero.
+1. Usar `clickhouse/clickhouse-server:26.8` (la línea LTS) como única base de datos, y `clickhouse-connect` sobre HTTP 8123 desde el sink. Se descartaron DuckDB (un solo escritor, sin servicio compartido en vivo) y PostgreSQL (store por filas, escaneos columnares más débiles).
+2. Guardar eventos y alertas en tablas `ReplacingMergeTree(<version>)` con clave `event_id`, usando `updated_at` como versión. Guardar dead letters con clave `dlq_id`, usando `failed_at` como versión. Guardar agregados con clave `(region, window_start)`, usando `event_count` como versión, de modo que gane la actualización de agregado más nueva.
+3. **No** particionar las tablas. ClickHouse reemplaza filas solo dentro de una misma partición, y una revisión puede cambiar `event_time`; una sola partición mantiene correctas la semántica de identidad y versión para este volumen de datos.
+4. Leer el estado actual solo a través de vistas `*_latest` que usan `FINAL`: `events_latest`, `window_stats_latest`, `alerts_latest` y `dead_letters_latest`. Una vista `data_clock` expone el `event_time` más nuevo almacenado, el reloj de pared y su desplazamiento para los dashboards.
+5. Dar a cada insert un `insert_deduplication_token` explícito con la forma `"<topic>:<partition>:<first_offset>-<last_offset>"` y configurar `non_replicated_deduplication_window = 1000` en cada tabla. Así, un lote de Kafka reintentado inserta cero filas crudas adicionales, incluso antes de los merges en segundo plano. Los sub-lotes bisectados agregan rangos de índices de fila `:<lo>-<hi>` para que sus escrituras se distingan del intento padre.
+6. Distribuir el esquema como seis archivos `.sql` incluidos, aplicados en orden por `ClickHouseMigrator` y registrados en `seismic.schema_migrations`. Cada sentencia es `IF NOT EXISTS`, así que `bootstrap` es idempotente y una caída a mitad de una migración puede reintentarse de forma segura.
+7. Tratar la tabla raw como un log de append y la vista `*_latest` como la tabla lógica. Reproducir la misma muestra dos veces mantiene `events_latest` estable mientras el conteo de filas de `events` raw puede crecer; esa diferencia se informa, nunca se afirma que sea cero.
 
-## Consequences
+## Consecuencias
 
-- `events_latest` exposes exactly one row per event id, with the newest revision
-  winning even when an older revision arrives later. Replaying twice leaves the
-  logical count unchanged.
-- Identical batches are deduplicated at insert time, so retries after a crash
-  between ClickHouse and the Kafka commit do not multiply rows.
-- Background merges do the physical replacement; readers pay the `FINAL` cost.
-  At the sample's scale this is negligible and keeps the demo honest.
-- A revision that changes event time remains in the same partition, so version
-  resolution is not lost.
-- The migration ledger records versions only after all statements of a file
-  succeed. Adding a column or index later requires a new numbered file, never an
-  edit to an applied one.
-- The adapter translates every driver exception into the D10 transient/permanent
-  taxonomy before it reaches application code; the sink never imports
-  `clickhouse_connect`.
+- `events_latest` expone exactamente una fila por id de evento, y la revisión más nueva gana incluso cuando una revisión más antigua llega después. Reproducir dos veces deja el conteo lógico sin cambios.
+- Los lotes idénticos se deduplican en el momento del insert, así que los reintentos tras una caída entre ClickHouse y el commit de Kafka no multiplican filas.
+- Los merges en segundo plano hacen el reemplazo físico; los lectores pagan el costo de `FINAL`. A la escala de la muestra es despreciable y mantiene la demo honesta.
+- Una revisión que cambia el tiempo de evento permanece en la misma partición, así que la resolución de versiones no se pierde.
+- El ledger de migraciones registra versiones solo después de que todas las sentencias de un archivo tienen éxito. Agregar una columna o un índice más adelante requiere un nuevo archivo numerado, nunca editar uno ya aplicado.
+- El adaptador traduce cada excepción del driver a la taxonomía transitoria/permanente de D10 antes de que llegue al código de aplicación; el sink nunca importa `clickhouse_connect`.
 
-## Alternatives considered
+## Alternativas consideradas
 
-- **DuckDB with a file on a shared volume.** Rejected: single-writer locking,
-  no live HTTP service for Grafana, and no insert-deduplication window.
-- **PostgreSQL.** Rejected: not columnar, weaker analytical scans over the
-  aggregates and less interesting for a data-engineering demonstration.
-- **`ReplacingMergeTree` with `PARTITION BY toYYYYMM(event_time)`.** Rejected:
-  revisions that change the month would bypass replacement; the data volume does
-  not justify partitions.
-- **Application-level "select then insert/update".** Rejected: racy, slower and
-  unnecessary when the engine already versions rows and deduplicates batches.
+- **DuckDB con un archivo en un volumen compartido.** Descartada: bloqueo de escritor único, sin servicio HTTP en vivo para Grafana y sin ventana de deduplicación de inserts.
+- **PostgreSQL.** Descartada: no es columnar, escaneos analíticos más débiles sobre los agregados y menos interesante para una demostración de ingeniería de datos.
+- **`ReplacingMergeTree` con `PARTITION BY toYYYYMM(event_time)`.** Descartada: las revisiones que cambian de mes evitarían el reemplazo; el volumen de datos no justifica particiones.
+- **Consultar y luego insertar o actualizar a nivel de aplicación.** Descartada: tiene condiciones de carrera, es más lenta e innecesaria cuando el motor ya versiona filas y deduplica lotes.

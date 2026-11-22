@@ -76,17 +76,17 @@ def test_every_metric_is_documented(spec: object) -> None:
 
 @pytest.mark.parametrize("adr", sorted(ADR_DIR.glob("*.md")), ids=lambda path: path.stem)
 def test_adr_has_required_sections_and_metadata(adr: Path) -> None:
-    """Each ADR carries Status, Date and the five required sections (S24/D27)."""
+    """Each ADR carries Estado, Fecha and the required sections (S24/D27, Spanish S39)."""
     text = adr.read_text(encoding="utf-8")
-    status = re.search(r"^- \*\*Status:\*\* \w+", text, re.MULTILINE)
-    date = re.search(r"^- \*\*Date:\*\* \d{4}-\d{2}-\d{2}", text, re.MULTILINE)
-    assert status, f"{adr.name}: no Status"
-    assert date, f"{adr.name}: no Date"
+    status = re.search(r"^- \*\*Estado:\*\* \w+", text, re.MULTILINE)
+    date = re.search(r"^- \*\*Fecha:\*\* \d{4}-\d{2}-\d{2}", text, re.MULTILINE)
+    assert status, f"{adr.name}: no Estado"
+    assert date, f"{adr.name}: no Fecha"
     for heading in (
-        "## Context",
-        "## Decision",
-        "## Consequences",
-        "## Alternatives considered",
+        "## Contexto",
+        "## Decisión",
+        "## Consecuencias",
+        "## Alternativas consideradas",
     ):
         assert heading in text, f"{adr.name}: missing {heading}"
 

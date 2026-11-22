@@ -1,90 +1,47 @@
-# ADR 0002: Quix Streams as the stateful stream processor
+# ADR 0002: Quix Streams como procesador de streams con estado
 
-- **Status:** Accepted
-- **Date:** 2026-11-20
-- **Related:** [Architecture](../ARCHITECTURE.md) · [ADR 0001](0001-redpanda.md) · [ADR 0007](0007-replay-event-time-and-data-clock.md)
+- **Estado:** Aceptada
+- **Fecha:** 2026-11-20
+- **Relacionados:** [Arquitectura](../ARCHITECTURE.md) · [ADR 0001](0001-redpanda.md) · [ADR 0007](0007-replay-event-time-and-data-clock.md)
 
-## Context
+## Contexto
 
-The processor must demonstrate production-shaped stream processing: stateful
-exact-duplicate detection keyed by `event_id`, event-time tumbling windows with a
-grace period, a configurable alert branch, and records that can be compared
-exactly against an independent reference implementation. It runs locally inside
-the Compose stack on CPU only, with a 4 GB Docker memory budget, Python 3.12 and
-no cloud account.
+El processor debe demostrar procesamiento de streams con forma de producción: detección de duplicados exactos con estado indexada por `event_id`, ventanas tumbling de tiempo de evento con período de gracia, una rama de alertas configurable y registros que pueden compararse exactamente contra una implementación de referencia independiente. Se ejecuta localmente dentro del stack de Compose, solo en CPU, con un presupuesto de memoria de Docker de 4 GB, Python 3.12 y sin cuenta en la nube.
 
-Candidate libraries were evaluated on 2026-11-19. Evidence:
+Las librerías candidatas se evaluaron el 2026-11-19. Evidencia:
 
-| Candidate | Release evidence | Windowing and state | Schema Registry / Avro | Verdict |
+| Candidata | Evidencia de releases | Ventanas y estado | Schema Registry / Avro | Veredicto |
 |---|---|---|---|---|
-| **Quix Streams 3.28.1** | PyPI upload 2026-10-15; Apache-2.0; Python `>=3.11,<4`; releases every 2-4 weeks (3.25.0 Jul 24, 3.26.0 Sep 14, 3.27.0 Sep 30, 3.28.0/3.28.1 Oct 15); repository active (pushed 2026-11-18) | Built-in tumbling/hopping/sliding/session windows; RocksDB state with changelog topics; stateful `apply(stateful=True)` | Bundled `AvroSerializer`/`AvroDeserializer` and `SchemaRegistryClientConfig` | **Selected** |
-| Bytewax 0.21.1 | Uploaded 2024-11-25; no release for roughly 12 months at check time | Python dataflow windows, state via recovery | No built-in subject/version management | Rejected as stale |
-| faust-streaming 0.15.4 | Uploaded 2026-10-28; maintained community fork | asyncio-object model, weaker declarative window API | No built-in Schema Registry/Avro adapters | Rejected: more glue code, less proven |
-| Apache Flink | Mature, widely used | Rich event-time windows and state | Needs external Avro/registry integration | Rejected: JVM and cluster-sized footprint for a laptop demo |
+| **Quix Streams 3.28.1** | Subida a PyPI el 2026-10-15; Apache-2.0; Python `>=3.11,<4`; releases cada 2-4 semanas (3.25.0 el 24 de jul, 3.26.0 el 14 de sep, 3.27.0 el 30 de sep, 3.28.0/3.28.1 el 15 de oct); repositorio activo (último push el 2026-11-18) | Ventanas tumbling, hopping, sliding y session integradas; estado en RocksDB con topics de changelog; `apply(stateful=True)` | `AvroSerializer`/`AvroDeserializer` y `SchemaRegistryClientConfig` incluidos | **Seleccionada** |
+| Bytewax 0.21.1 | Subido el 2024-11-25; sin release en unos 12 meses al momento de la verificación | Dataflow en Python con ventanas; estado vía recuperación | Sin gestión integrada de subjects y versiones | Descartada por desactualizada |
+| faust-streaming 0.15.4 | Subido el 2026-10-28; fork comunitario mantenido | Modelo de objetos asyncio, API declarativa de ventanas más débil | Sin adaptadores integrados de Schema Registry ni Avro | Descartada: más código de pegamento, menos probada |
+| Apache Flink | Maduro y muy usado | Ventanas de tiempo de evento y estado ricos | Requiere integración externa de Avro y registry | Descartado: JVM y una huella de clúster excesiva para una laptop |
 
-The chosen library pins `confluent-kafka<2.13`, `pydantic<2.14` and
-`pydantic-settings<2.16`; the lockfile respects those pins instead of forcing
-newer versions. Linux wheels and Windows-native wheels for `confluent-kafka`
-2.16.2 and `rocksdict` 0.3.29 (cp312) are published, so the unit-test matrix can
-install natively; the runtime stack itself runs in Linux containers.
+La biblioteca elegida fija `confluent-kafka<2.13`, `pydantic<2.14` y `pydantic-settings<2.16`; el lockfile respeta esos pins en lugar de forzar versiones más nuevas. Hay wheels para Linux y wheels nativos de Windows para `confluent-kafka` 2.16.2 y `rocksdict` 0.3.29 (cp312) publicados, así que la matriz de tests unitarios puede instalar de forma nativa; el stack de runtime en sí corre en contenedores Linux.
 
-## Decision
+## Decisión
 
-1. Use **Quix Streams 3.28.1** (`quixstreams[avro]`) for the processor only.
-   Ingest and the sink remain on plain `confluent-kafka`, as D9 requires.
-2. Build the `Application` with consumer group `seismic-processor`,
-   `auto_offset_reset="earliest"`, `processing_guarantee="at-least-once"`, a
-   configurable `state_dir` (the `processor-state` volume in Compose), and
-   `timestamp_extractor` returning `event_time_ms` (D12).
-3. Deduplicate with a stateful `apply` keyed by the Kafka event key. The state
-   stores `updated_at_ms` per `event_id`; `Deduplicator.decide` returns NEW for an
-   unseen id, REVISION for a strictly larger `updated_at_ms`, and DUPLICATE
-   otherwise. Duplicates are filtered out; revisions flow to alerts but never to
-   windows.
-4. Aggregate NEW events in tumbling windows (`SEISMIC_WINDOW_MINUTES`, default
-   60; grace `SEISMIC_WINDOW_GRACE_MINUTES`, default 10) grouped by `region`,
-   using `Count`, `Max`, `Mean` and `Sum` over the Gutenberg-Richter energy, and
-   emit every update with `.current()` so the last message per
-   `(region, window_start_ms)` is the final aggregate.
-5. Serialize `window_stats` and `alert` with Quix Avro serializers configured
-   with `auto_register_schemas=False` and `use_latest_version=True`, so only
-   `bootstrap` ever registers contracts (D4).
-6. Convert only `KeyError`/`ValueError` processing failures into skipped rows;
-   undecodable bytes are logged, counted as
-   `seismic_processor_skipped_total{reason="undecodable"}` and skipped, so poison
-   bytes cannot stop the pipeline.
-7. Derive window-emission timestamps from the window end, never from the wall
-   clock, keeping aggregates reproducible at any replay speed.
+1. Usar **Quix Streams 3.28.1** (`quixstreams[avro]`) solo para el processor. Ingest y el sink siguen con `confluent-kafka` simple, como exige D9.
+2. Construir la `Application` con el consumer group `seismic-processor`, `auto_offset_reset="earliest"`, `processing_guarantee="at-least-once"`, un `state_dir` configurable (el volumen `processor-state` en Compose) y un `timestamp_extractor` que devuelve `event_time_ms` (D12).
+3. Deduplicar con un `apply` con estado indexado por la clave de evento de Kafka. El estado guarda `updated_at_ms` por `event_id`; `Deduplicator.decide` devuelve NEW para un id no visto, REVISION para un `updated_at_ms` estrictamente mayor, y DUPLICATE en otro caso. Los duplicados se filtran; las revisiones fluyen a alertas pero nunca a las ventanas.
+4. Agregar los eventos NEW en ventanas tumbling (`SEISMIC_WINDOW_MINUTES`, por defecto 60; gracia `SEISMIC_WINDOW_GRACE_MINUTES`, por defecto 10) agrupadas por `region`, usando `Count`, `Max`, `Mean` y `Sum` sobre la energía de Gutenberg-Richter, y emitir cada actualización con `.current()` para que el último mensaje por `(region, window_start_ms)` sea el agregado final.
+5. Serializar `window_stats` y `alert` con los serializadores Avro de Quix configurados con `auto_register_schemas=False` y `use_latest_version=True`, de modo que solo `bootstrap` registre contratos (D4).
+6. Convertir solo los fallos de procesamiento `KeyError`/`ValueError` en filas omitidas; los bytes no decodificables se registran, se cuentan como `seismic_processor_skipped_total{reason="undecodable"}` y se omiten, de modo que los bytes venenosos no puedan detener el pipeline.
+7. Derivar los timestamps de emisión de las ventanas desde el fin de la ventana, nunca desde el reloj de pared, manteniendo los agregados reproducibles a cualquier velocidad de replay.
 
-## Consequences
+## Consecuencias
 
-- Window results are deterministic and can be compared field-by-field with
-  `tests/support/reference.py`, which walks the raw USGS features with plain
-  Python and does not import Quix Streams.
-- Stateful dedup keeps one `updated_at_ms` per seen event id. The state is
-  unbounded in theory, which is documented as a limitation for v0.1.0.
-- `.current()` emits one message per event and open window. Downstream readers
-  must use the last version per key; the ClickHouse sink's `ReplacingMergeTree`
-  provides that semantics in T9.
-- The library adds `rocksdict` and a state changelog topic to the stack, which is
-  acceptable within the memory budget and gives crash recovery for free.
-- Quix's API is wrapped behind `adapters/stream/topology.py`; replacing it would
-  only require a new adapter, because dedup, energy and alert semantics live in
-  `application/` and `domain/`.
-- Using Quix for the processor while the sink stays a custom loop means two
-  Kafka client stacks, but each is used where it is strongest (D9).
+- Los resultados de ventanas son deterministas y pueden compararse campo por campo con `tests/support/reference.py`, que recorre las features crudas de USGS con Python simple y no importa Quix Streams.
+- La deduplicación con estado conserva un `updated_at_ms` por id de evento visto. El estado es teóricamente ilimitado, lo que se documenta como limitación para v0.1.0.
+- `.current()` emite un mensaje por evento y ventana abierta. Los lectores downstream deben usar la última versión por clave; el `ReplacingMergeTree` del sink de ClickHouse provee esa semántica en T9.
+- La biblioteca agrega `rocksdict` y un topic de changelog de estado al stack, lo que es aceptable dentro del presupuesto de memoria y da recuperación ante caídas sin costo adicional.
+- La API de Quix queda envuelta detrás de `adapters/stream/topology.py`; reemplazarla solo requeriría un nuevo adaptador, porque la semántica de deduplicación, energía y alertas vive en `application/` y `domain/`.
+- Usar Quix para el processor mientras el sink sigue siendo un loop propio implica dos stacks de clientes de Kafka, pero cada uno se usa donde es más fuerte (D9).
 
-## Alternatives considered
+## Alternativas consideradas
 
-- **Quix Streams for ingest and the sink too.** Rejected: storage must remain an
-  `EventStore` port with explicit pause/resume, retries and batch bisection, which
-  is application policy (D9/D10).
-- **Bytewax.** Rejected: no release for roughly a year at evaluation time and no
-  built-in Schema Registry integration.
-- **faust-streaming.** Rejected: maintained, but its asyncio-object API provides
-  no built-in Avro/Schema Registry support and a weaker declarative window API.
-- **Apache Flink.** Rejected: JVM plus cluster footprint is disproportionate for
-  a single-node local demo.
-- **Hand-written windows over raw `confluent-kafka`.** Rejected: it would
-  reimplement state stores, changelogs and event-time closure, adding risk
-  without demonstrating a different capability.
+- **Quix Streams también para ingest y el sink.** Descartada: el almacenamiento debe seguir siendo un puerto `EventStore` con pausa y reanudación explícitas, reintentos y bisección por lotes, que es política de aplicación (D9/D10).
+- **Bytewax.** Descartada: sin release durante aproximadamente un año al momento de la evaluación y sin integración integrada con Schema Registry.
+- **faust-streaming.** Descartada: mantenido, pero su API de objetos asyncio no ofrece soporte integrado para Avro ni Schema Registry, y su API declarativa de ventanas es más débil.
+- **Apache Flink.** Descartada: la huella de JVM más clúster es desproporcionada para una demo local de un solo nodo.
+- **Ventanas escritas a mano sobre `confluent-kafka` crudo.** Descartada: reimplementaría almacenes de estado, changelogs y cierre por tiempo de evento, sumando riesgo sin demostrar una capacidad distinta.
