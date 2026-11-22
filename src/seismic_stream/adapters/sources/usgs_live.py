@@ -39,7 +39,7 @@ ALLOWED_FEEDS: Final[frozenset[str]] = frozenset(
         "significant_day",
     }
 )
-PROJECT_URL: Final = "https://github.com/Eduardo12Pacheco/realtime-seismic-stream"
+PROJECT_URL: Final = "https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real"
 MIN_POLL_INTERVAL_SECONDS: Final = 60.0
 BASE_BACKOFF_SECONDS: Final = 60.0
 MAX_BACKOFF_SECONDS: Final = 900.0

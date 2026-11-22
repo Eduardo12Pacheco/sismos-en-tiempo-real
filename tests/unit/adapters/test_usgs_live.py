@@ -348,7 +348,7 @@ def test_user_agent_contains_project_url_and_version() -> None:
     agent = default_user_agent()
 
     assert agent.startswith("realtime-seismic-stream/")
-    assert "https://github.com/Eduardo12Pacheco/realtime-seismic-stream" in agent
+    assert "https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real" in agent
 
 
 def test_failures_do_not_write_to_stdout(
