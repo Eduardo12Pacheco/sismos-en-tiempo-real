@@ -75,20 +75,39 @@ def _write_docker_stub(
     return stub
 
 
+def _posix_bash() -> str | None:
+    """Return a POSIX bash, preferring Git for Windows on Windows.
+
+    On Windows runners ``bash`` on PATH can resolve to WSL's ``bash.exe``, which
+    cannot see Windows paths such as ``D:\\a\\...\\install.sh``.
+    """
+    if os.name != "nt":
+        return shutil.which("bash")
+    git = shutil.which("git")
+    if git is None:
+        return None
+    candidate = Path(git).parents[1] / "bin" / "bash.exe"
+    return str(candidate) if candidate.is_file() else None
+
+
 def _run_sh(
     *args: str,
     stub_dir: Path | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    bash = _posix_bash() or "bash"
     env = dict(os.environ)
     env.pop("SEISMIC_REPLAY_SPEED", None)
     env.pop("SEISMIC_REPLAY_CHAOS", None)
+    if os.name == "nt":
+        # Stub scripts use "#!/usr/bin/env bash"; keep that lookup on the same bash.
+        env["PATH"] = f"{Path(bash).parent}{os.pathsep}{env.get('PATH', '')}"
     if stub_dir is not None:
         env["PATH"] = f"{stub_dir}{os.pathsep}{env.get('PATH', '')}"
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        ["bash", str(INSTALL_SH), *args],
+        [bash, str(INSTALL_SH), *args],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -99,7 +118,7 @@ def _run_sh(
 
 
 bash_required = pytest.mark.skipif(
-    shutil.which("bash") is None, reason="bash is required to exercise install.sh"
+    _posix_bash() is None, reason="bash is required to exercise install.sh"
 )
 
 
