@@ -63,4 +63,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           body_path: CHANGELOG_RELEASE.md
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS
