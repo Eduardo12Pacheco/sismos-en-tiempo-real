@@ -38,7 +38,7 @@ seismic-stream = "seismic_stream.cli:app"
 packages = ["src/seismic_stream"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/seismic_stream", "README.md", "README.es.md", "LICENSE", "pyproject.toml"]
+include = ["src/seismic_stream", "README.md", "README.en.md", "LICENSE", "pyproject.toml"]
 
 [dependency-groups]
 dev = [

@@ -49,7 +49,7 @@ Documentation is part of the definition of done and is drift-tested by
 
 | File | Audience and content |
 |---|---|
-| `README.md`, `README.es.md` | Public pitch, quickstart, limitations; `README.md` stays at 150 lines or fewer |
+| `README.md`, `README.en.md` | Public pitch, quickstart, limitations; `README.md` (Spanish, primary) and `README.en.md` (English) each stay at 150 lines or fewer |
 | `docs/ARCHITECTURE.md` | Layers, the D28 patterns with their implementing module, data flow, schemas, delivery semantics and scaling path |
 | `docs/DATA.md` | Sample provenance, query, checksum, re-recording, licence and credit |
 | `docs/OPERATIONS.md` | Prerequisites, commands, every environment variable, metrics, ports and troubleshooting |
