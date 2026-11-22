@@ -25,16 +25,16 @@ have WSL2 installed; `.\install.ps1 -Check -Json` reports the detected mode.
 Linux and macOS:
 
 ```bash
-git clone https://github.com/Eduardo12Pacheco/realtime-seismic-stream.git
-cd realtime-seismic-stream
+git clone https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real.git
+cd sismos-en-tiempo-real
 ./install.sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-git clone https://github.com/Eduardo12Pacheco/realtime-seismic-stream.git
-Set-Location realtime-seismic-stream
+git clone https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real.git
+Set-Location sismos-en-tiempo-real
 .\install.ps1
 ```
 

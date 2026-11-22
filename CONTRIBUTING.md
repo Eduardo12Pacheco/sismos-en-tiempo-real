@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for taking a look at `realtime-seismic-stream`. This guide covers the local
+Thanks for taking a look at `sismos-en-tiempo-real`. This guide covers the local
 workflow, the quality gates and the conventions used in this repository.
 
 ## Requirements

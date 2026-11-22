@@ -1,10 +1,10 @@
-# realtime-seismic-stream
+# sismos-en-tiempo-real
 
 **A local real-time earthquake streaming pipeline** — Redpanda, Quix Streams, ClickHouse and
 Grafana, with an offline time-compressed replay of a real USGS week. One `./install.sh` builds the
 whole stack, replays ~1,800 earthquakes and opens live dashboards on your machine.
 
-[![CI](https://github.com/Eduardo12Pacheco/realtime-seismic-stream/actions/workflows/ci.yml/badge.svg)](https://github.com/Eduardo12Pacheco/realtime-seismic-stream/actions/workflows/ci.yml)
+[![CI](https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real/actions/workflows/ci.yml/badge.svg)](https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Docker Compose](https://img.shields.io/badge/docker%20compose-%E2%89%A52.20-blue.svg)](compose.yaml)
@@ -53,8 +53,8 @@ Full component, port and data-flow details are in [docs/ARCHITECTURE.md](docs/AR
 ### Linux and macOS
 
 ```sh
-git clone https://github.com/Eduardo12Pacheco/realtime-seismic-stream.git
-cd realtime-seismic-stream
+git clone https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real.git
+cd sismos-en-tiempo-real
 ./install.sh
 ```
 
@@ -63,8 +63,8 @@ Open <http://localhost:13000>. The default replay compresses one week of event t
 ### Windows (PowerShell 7+, Docker Desktop with Linux containers)
 
 ```powershell
-git clone https://github.com/Eduardo12Pacheco/realtime-seismic-stream.git
-cd realtime-seismic-stream
+git clone https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real.git
+cd sismos-en-tiempo-real
 ./install.ps1
 ```
 

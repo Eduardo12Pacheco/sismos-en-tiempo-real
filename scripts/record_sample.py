@@ -27,7 +27,7 @@ QUERY_PARAMS: dict[str, str] = {
 SAMPLE_NAME = "usgs_2026-11-02_2026-11-09_m1.geojson"
 DEFAULT_OUTPUT = Path("data") / "samples" / SAMPLE_NAME
 USER_AGENT = (
-    "realtime-seismic-stream/0.1.0 (+https://github.com/Eduardo12Pacheco/realtime-seismic-stream)"
+    "realtime-seismic-stream/0.1.0 (+https://github.com/Eduardo12Pacheco/sismos-en-tiempo-real)"
 )
 CHUNK_SIZE = 1024 * 1024
 
