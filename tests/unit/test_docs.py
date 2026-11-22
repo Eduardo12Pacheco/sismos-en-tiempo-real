@@ -144,11 +144,15 @@ def test_docs_have_no_placeholder_markers(path: Path) -> None:
     assert not matches, f"{path.relative_to(ROOT)} contains placeholders: {matches}"
 
 
-@pytest.mark.parametrize("path", sorted(DOCS.rglob("*.md")), ids=lambda path: path.name)
+#: The generated BENCHMARKS.md is the only prose file allowed to carry benchmark numbers (S26).
+UNCITED_CLAIM_CANDIDATES = [
+    path for path in sorted(DOCS.rglob("*.md")) if path.name != "BENCHMARKS.md"
+]
+
+
+@pytest.mark.parametrize("path", UNCITED_CLAIM_CANDIDATES, ids=lambda path: path.name)
 def test_no_uncited_benchmark_claims(path: Path) -> None:
     """Benchmark numbers live only in the generated BENCHMARKS.md (S26)."""
-    if path.name == "BENCHMARKS.md":
-        pytest.skip("generated in T14; the only file allowed to carry benchmark numbers")
     text = path.read_text(encoding="utf-8")
     assert not BENCHMARK_TOKEN_RE.search(text), f"{path.name} claims a benchmark number"
 
